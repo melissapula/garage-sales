@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { EmailOtpType } from '@supabase/supabase-js'
+
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()
@@ -7,29 +9,52 @@ const route = useRoute()
 const error = ref<string | null>(null)
 
 async function processCallback() {
-    // PKCE / email-confirmation flow: ?code=… in the URL.
-    const code = route.query.code as string | undefined
-    if (code) {
-        const { error: err } = await supabase.auth.exchangeCodeForSession(code)
+    // 1. Server-side error (e.g. expired link).
+    const errDesc = route.query.error_description as string | undefined
+    if (errDesc) {
+        error.value = decodeURIComponent(errDesc)
+        return
+    }
+
+    // 2. Token hash flow (recommended for cross-device email links).
+    //    Supabase email template needs {{ .TokenHash }} and a type for this
+    //    to work — see README/CLAUDE.md.
+    const tokenHash = route.query.token_hash as string | undefined
+    const otpType = route.query.type as EmailOtpType | undefined
+    if (tokenHash && otpType) {
+        const { error: err } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+        })
         if (err) {
             error.value = err.message
             return
         }
-    }
-
-    // For implicit (hash) tokens the Supabase client auto-detects on init.
-    // Whichever path we took, ask for the session now.
-    const { data } = await supabase.auth.getSession()
-    if (data.session) {
         router.push('/browse')
         return
     }
 
-    // No session even after processing — give the page a moment in case the
-    // module middleware is still finishing up, then surface a meaningful error.
+    // 3. PKCE flow: ?code=… in the URL. Only succeeds on the same device
+    //    that initiated signup; otherwise we treat it as "verified but no
+    //    local session" and bounce to login with a friendly banner.
+    const code = route.query.code as string | undefined
+    if (code) {
+        const { error: err } = await supabase.auth.exchangeCodeForSession(code)
+        if (!err) {
+            router.push('/browse')
+            return
+        }
+        // Most common case: cross-device click. The email confirmation has
+        // succeeded server-side, the user just needs to sign in fresh here.
+        router.push('/login?confirmed=1')
+        return
+    }
+
+    // 4. Implicit flow: hash tokens auto-detected by the client on init.
+    //    Give it a beat to settle, then check.
     setTimeout(async () => {
-        const { data: late } = await supabase.auth.getSession()
-        if (late.session) {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
             router.push('/browse')
         } else {
             error.value =
@@ -40,8 +65,6 @@ async function processCallback() {
 
 onMounted(processCallback)
 
-// Belt-and-suspenders: if the module finishes setting the user after our check,
-// still navigate.
 watchEffect(() => {
     if (user.value) router.push('/browse')
 })
