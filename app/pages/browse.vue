@@ -116,7 +116,10 @@ const upcomingCount = computed(
                     :sale="selectedSale"
                     @clear="clearSelection"
                 />
-                <div v-else class="space-y-3 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:pr-1">
+                <div
+                    v-else
+                    class="space-y-3 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto lg:p-1"
+                >
                     <div
                         v-if="filteredSales.length === 0"
                         class="rounded-xl bg-white p-6 text-center text-sm text-gray-600 ring-1 ring-orange-100"
