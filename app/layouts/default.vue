@@ -1,15 +1,51 @@
 <script setup lang="ts">
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
 const user = useSupabaseUser()
 const supabase = useSupabaseClient()
-const { count: unreadCount, refresh: refreshUnread } = useUnreadCount()
+const unread = useUnreadCount()
+const unreadCount = unread.count
+
+let channel: RealtimeChannel | null = null
+
+function teardownChannel() {
+    if (channel) supabase.removeChannel(channel)
+    channel = null
+}
+
+function subscribeUnread() {
+    teardownChannel()
+    if (!user.value) return
+    channel = supabase
+        .channel('layout-unread')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'messages' },
+            () => {
+                unread.refresh()
+            },
+        )
+        .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'messages' },
+            () => {
+                // Mark-read updates change the unread count.
+                unread.refresh()
+            },
+        )
+        .subscribe()
+}
 
 watch(
     user,
     () => {
-        refreshUnread()
+        unread.refresh()
+        subscribeUnread()
     },
     { immediate: true },
 )
+
+onBeforeUnmount(teardownChannel)
 
 async function signOut() {
     await supabase.auth.signOut()
@@ -63,6 +99,12 @@ async function signOut() {
                             >
                                 {{ unreadCount > 99 ? '99+' : unreadCount }}
                             </span>
+                        </NuxtLink>
+                        <NuxtLink
+                            to="/account"
+                            class="rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-brand-600"
+                        >
+                            Account
                         </NuxtLink>
                         <button
                             class="rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-900"

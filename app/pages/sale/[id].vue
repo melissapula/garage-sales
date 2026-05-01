@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
+import type { GarageSale, SaleOwnerStatus } from '~/composables/useGarageSales'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
@@ -69,6 +69,27 @@ async function copyLink() {
         // fall back to a prompt
         window.prompt('Copy this link:', shareUrl.value)
     }
+}
+
+const lightboxIndex = ref<number | null>(null)
+
+const updatingStatus = ref(false)
+const statusError = ref<string | null>(null)
+async function setStatus(next: SaleOwnerStatus) {
+    if (!sale.value) return
+    if (sale.value.status === next) return
+    updatingStatus.value = true
+    statusError.value = null
+    const { error: err } = await supabase
+        .from('garage_sales')
+        .update({ status: next })
+        .eq('id', sale.value.id)
+    updatingStatus.value = false
+    if (err) {
+        statusError.value = err.message
+        return
+    }
+    sale.value = { ...sale.value, status: next }
 }
 
 const messaging = ref(false)
@@ -155,6 +176,19 @@ async function deleteSale() {
                 {{ sale.title }}
             </h1>
 
+            <!-- Owner status banner -->
+            <div
+                v-if="sale.status !== 'open'"
+                class="mt-4 flex items-start gap-3 rounded-xl px-4 py-3 ring-1"
+                :class="statusBannerClass(sale.status)"
+            >
+                <span class="text-xl leading-none">{{ statusOption(sale.status).icon }}</span>
+                <div class="text-sm">
+                    <p class="font-semibold">{{ statusOption(sale.status).label }}</p>
+                    <p class="mt-0.5">{{ statusOption(sale.status).description }}</p>
+                </div>
+            </div>
+
             <p class="mt-2 text-gray-700">📍 {{ sale.address }}</p>
             <p class="mt-1 text-gray-700">
                 📅 {{ formatDateRange(sale.start_date, sale.end_date) }}
@@ -167,13 +201,12 @@ async function deleteSale() {
                 v-if="sale.photos && sale.photos.length"
                 class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3"
             >
-                <a
+                <button
                     v-for="(url, i) in sale.photos"
                     :key="url"
-                    :href="url"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    type="button"
                     class="aspect-square overflow-hidden rounded-xl bg-gray-100 ring-1 ring-orange-100 transition hover:ring-2 hover:ring-brand-500"
+                    @click="lightboxIndex = i"
                 >
                     <img
                         :src="url"
@@ -181,8 +214,9 @@ async function deleteSale() {
                         loading="lazy"
                         class="h-full w-full object-cover"
                     />
-                </a>
+                </button>
             </div>
+            <PhotoLightbox v-model:open="lightboxIndex" :photos="sale.photos ?? []" />
 
             <p
                 v-if="sale.description"
@@ -227,6 +261,41 @@ async function deleteSale() {
                         Delete
                     </button>
                 </template>
+            </div>
+
+            <!-- Owner status pills -->
+            <div
+                v-if="isOwner"
+                class="mt-6 rounded-xl bg-white p-4 ring-1 ring-orange-100"
+            >
+                <h2 class="font-display text-base font-bold text-gray-900">Sale status</h2>
+                <p class="mt-1 text-xs text-gray-600">
+                    Update what people see on the map and detail page.
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <button
+                        v-for="opt in STATUS_OPTIONS"
+                        :key="opt.value"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition"
+                        :class="
+                            sale.status === opt.value
+                                ? 'border-brand-500 bg-brand-500 text-white'
+                                : 'border-gray-200 bg-white text-gray-700 hover:border-brand-300 hover:bg-orange-50'
+                        "
+                        :disabled="updatingStatus"
+                        @click="setStatus(opt.value)"
+                    >
+                        <span>{{ opt.icon }}</span>
+                        <span>{{ opt.short }}</span>
+                    </button>
+                </div>
+                <p
+                    v-if="statusError"
+                    class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
+                >
+                    {{ statusError }}
+                </p>
             </div>
 
             <div class="mt-8 border-t border-orange-100 pt-6">

@@ -58,10 +58,20 @@ function buildPopupHtml(sale: GarageSale, withCloseButton: boolean): string {
     const dates = formatDateRange(sale.start_date, sale.end_date)
     const times = formatTimeRange(sale.start_time, sale.end_time)
     const status = saleStatus(sale)
-    const badge =
+    const dateBadge =
         status === 'active'
             ? '<span style="background:#DCFCE7;color:#166534;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">Today</span>'
             : '<span style="background:#FEF9C3;color:#854D0E;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">Upcoming</span>'
+    const ownerOpt = statusOption(sale.status)
+    const ownerToneStyles: Record<string, string> = {
+        warn: 'background:#FEF3C7;color:#92400E;',
+        caution: 'background:#FFEDD5;color:#9A3412;',
+    }
+    const ownerBadge =
+        sale.status === 'open'
+            ? ''
+            : `<span style="${ownerToneStyles[ownerOpt.tone] || ''}padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px;">${ownerOpt.icon} ${ownerOpt.short}</span>`
+    const badge = `${dateBadge}${ownerBadge ? ' ' + ownerBadge : ''}`
     const closeBtn = withCloseButton
         ? `<button type="button" data-popup-close style="position:absolute;top:6px;right:6px;width:24px;height:24px;border:0;background:transparent;cursor:pointer;color:#9ca3af;font-size:20px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;" aria-label="Close">×</button>`
         : ''

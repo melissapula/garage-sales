@@ -16,6 +16,8 @@ const status = computed(() => saleStatus(props.sale))
 const dateRange = computed(() => formatDateRange(props.sale.start_date, props.sale.end_date))
 const timeRange = computed(() => formatTimeRange(props.sale.start_time, props.sale.end_time))
 
+const lightboxIndex = ref<number | null>(null)
+
 const saving = ref(false)
 async function onLetsGo() {
     if (!user.value) {
@@ -64,6 +66,18 @@ async function onLetsGo() {
 
         <h2 class="font-display text-2xl font-bold text-gray-900">{{ sale.title }}</h2>
 
+        <div
+            v-if="sale.status !== 'open'"
+            class="mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ring-1"
+            :class="statusBannerClass(sale.status)"
+        >
+            <span>{{ statusOption(sale.status).icon }}</span>
+            <span>
+                <strong>{{ statusOption(sale.status).label }}.</strong>
+                {{ statusOption(sale.status).description }}
+            </span>
+        </div>
+
         <p class="mt-2 text-gray-700">📍 {{ sale.address }}</p>
         <p class="mt-1 text-gray-700">
             📅 {{ dateRange }}<span v-if="timeRange"> · {{ timeRange }}</span>
@@ -73,13 +87,12 @@ async function onLetsGo() {
             v-if="sale.photos && sale.photos.length"
             class="mt-4 grid grid-cols-3 gap-1.5"
         >
-            <a
+            <button
                 v-for="(url, i) in sale.photos"
                 :key="url"
-                :href="url"
-                target="_blank"
-                rel="noopener noreferrer"
+                type="button"
                 class="aspect-square overflow-hidden rounded-lg bg-gray-100 ring-1 ring-orange-100 transition hover:ring-2 hover:ring-brand-500"
+                @click="lightboxIndex = i"
             >
                 <img
                     :src="url"
@@ -87,8 +100,9 @@ async function onLetsGo() {
                     loading="lazy"
                     class="h-full w-full object-cover"
                 />
-            </a>
+            </button>
         </div>
+        <PhotoLightbox v-model:open="lightboxIndex" :photos="sale.photos ?? []" />
 
         <p
             v-if="sale.description"

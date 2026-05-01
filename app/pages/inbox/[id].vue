@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { Message } from '~/composables/useMessaging'
+
 const route = useRoute()
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
@@ -25,8 +28,7 @@ async function send() {
     try {
         await sendMessage(data.value.thread.id, draft.value)
         draft.value = ''
-        await refresh()
-        scrollToBottom()
+        // Realtime will append the new message; no need to refresh().
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to send'
     } finally {
@@ -57,12 +59,44 @@ async function deleteThread() {
     navigateTo('/inbox')
 }
 
+let channel: RealtimeChannel | null = null
+
 onMounted(async () => {
     if (data.value) {
         await markThreadRead(id)
         unread.refresh()
         scrollToBottom()
     }
+
+    // Realtime: append incoming messages live, mark them read on arrival.
+    channel = supabase
+        .channel(`thread-${id}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `thread_id=eq.${id}`,
+            },
+            async (payload) => {
+                const msg = payload.new as Message
+                if (!data.value) return
+                if (data.value.messages.some((m) => m.id === msg.id)) return
+                data.value.messages.push(msg)
+                scrollToBottom()
+                if (msg.sender_id !== user.value?.id) {
+                    await markThreadRead(id)
+                    unread.refresh()
+                }
+            },
+        )
+        .subscribe()
+})
+
+onBeforeUnmount(() => {
+    if (channel) supabase.removeChannel(channel)
+    channel = null
 })
 
 function fmtTimestamp(iso: string): string {

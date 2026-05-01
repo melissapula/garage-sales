@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
 const { data: threads, refresh } = await useAsyncData(
@@ -9,7 +12,33 @@ const { data: threads, refresh } = await useAsyncData(
 
 const unread = useUnreadCount()
 
-onMounted(() => unread.refresh())
+let channel: RealtimeChannel | null = null
+
+onMounted(() => {
+    unread.refresh()
+    channel = supabase
+        .channel('inbox-list')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'messages' },
+            () => {
+                refreshAll()
+            },
+        )
+        .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'message_threads' },
+            () => {
+                refresh()
+            },
+        )
+        .subscribe()
+})
+
+onBeforeUnmount(() => {
+    if (channel) supabase.removeChannel(channel)
+    channel = null
+})
 
 async function refreshAll() {
     await Promise.all([refresh(), unread.refresh()])

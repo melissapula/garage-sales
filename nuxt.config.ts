@@ -46,6 +46,7 @@ export default defineNuxtConfig({
             callback: '/confirm',
             include: [
                 '/account',
+                '/account/**',
                 '/post',
                 '/post/**',
                 '/my-sales',

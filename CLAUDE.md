@@ -1,7 +1,7 @@
 # Bemidji Garage Sales — Project Context for Claude
 
 > Read this file at the start of every session to get fully up to speed.
-> Last updated: 2026-04-30
+> Last updated: 2026-05-01
 
 ---
 
@@ -55,7 +55,7 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 | Table             | Purpose                                                                 | Notes                                                                                     |
 | ----------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `garage_sales`    | The core listing.                                                       | `photos text[]`, `contact_enabled boolean`, dates/times, lat/lng. RLS: public read.       |
+| `garage_sales`    | The core listing.                                                       | `photos text[]`, `contact_enabled boolean`, `status text` (open/running_late/winding_down/closed), dates/times, lat/lng. RLS: public read. |
 | `saved_sales`     | Per-user wishlist (the "Let's go!" list).                               | PK `(user_id, garage_sale_id)`. RLS: owner-only.                                          |
 | `routes`          | A planned outing on a specific day.                                     | `route_date date not null`. RLS: owner-only.                                              |
 | `route_stops`     | Ordered sales within a route.                                           | PK `(route_id, garage_sale_id)`, `position int`. RLS: via parent route.                   |
@@ -75,6 +75,8 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 3. `0003_storage_sale_photos.sql` — public `sale-photos` storage bucket + RLS based on first path segment.
 4. `0004_profiles.sql` — `profiles` table, signup trigger, backfill of existing users.
 5. `0005_messaging.sql` — adds `garage_sales.contact_enabled`, `message_threads`, `messages`, and the last-message-update trigger.
+6. `0006_sale_status.sql` — adds `garage_sales.status` column with check constraint.
+7. `0007_realtime_messaging.sql` — adds `messages` and `message_threads` to the `supabase_realtime` publication.
 
 ---
 
@@ -91,7 +93,8 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 /confirm              Auth callback redirect
 /post                 Create a sale (auth)
 /post/[id]            Edit a sale (auth, owner-only)
-/sale/[id]            Public detail page with share + message owner
+/sale/[id]            Public detail page with share + message owner + owner status pills + photo lightbox
+/account              Display-name editor (auth)
 /my-sales             Owner's posts list (auth)
 /itineraries          Saved sales + plan-a-route form + routes list (auth)
 /itineraries/[id]     Route builder: stops, map, optimize, timeline, exports (auth)
@@ -101,7 +104,7 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 ### Components
 
-`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader`.
+`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader`, `PhotoLightbox`.
 
 ### Composables
 
@@ -109,7 +112,7 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 ### Utils
 
-`saleStatus` (active/upcoming/past + pin colors + date/time formatters), `filters` (day + time-bucket filtering).
+`saleStatus` (active/upcoming/past + pin colors + date/time formatters), `filters` (day + time-bucket filtering), `ownerStatus` (status options + badge/banner Tailwind class helpers).
 
 ### Key behaviors
 
@@ -122,6 +125,9 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 - **Maps export:** Google Maps URL `dir/?api=1&...` and Apple Maps `?saddr&daddr=A+to:B`. Round-trip toggle is honored. Google caps at 9 waypoints; the UI warns when stops are dropped.
 - **Facebook share:** standard share dialog (`facebook.com/sharer/sharer.php?u=...`). We can't auto-target a specific group — Meta deprecated `publish_to_groups` for general apps. The OG meta tags on `/sale/[id]` give the dialog a rich preview once the site is deployed.
 - **Messaging:** thread is keyed by (pair of participants, sale_id). Find-or-create on first message. Unread count = my unread messages across all threads (RLS-filtered). Shown as a navbar badge.
+- **Realtime:** `/inbox/[id]` subscribes to message INSERTs filtered to its `thread_id` and appends them live. `/inbox` subscribes to all message INSERTs (RLS-filtered) and refreshes. The default layout subscribes to message inserts/updates and refreshes the navbar badge. Channels are removed on unmount.
+- **Owner status:** `garage_sales.status` is one of `open` (default), `running_late`, `winding_down`, `closed`. Closed sales are filtered out of `/browse` (`fetchActiveSales` adds `.neq('status', 'closed')`) but still visible to the owner on `/my-sales`. The owner sets status from quick-tap pills on `/sale/[id]`. Banner shows on detail and inline status badge shows on cards/popovers.
+- **Photo lightbox:** `PhotoLightbox.vue` is a teleport-to-body modal with arrow-key + swipe + Esc + click-outside close. Fixed body overflow while open.
 
 ### Environment variables (in `.env`, gitignored)
 
@@ -140,12 +146,9 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 ## Known gaps / what's left
 
 - **Auth emails through Resend.** Currently we use Supabase's default mailer (rate-limited, generic sender). Frula already has a verified Resend domain we could borrow.
-- **No profile-settings page.** Display names auto-populate from email prefix; users can't change them yet.
-- **No real-time message updates.** Threads only refresh on visit / refresh button. Supabase Realtime would be a clean upgrade.
-- **No photo lightbox** on the sale detail. Images open in a new tab.
 - **No mobile drawer for filters** — currently the browse page uses simple tab navigation between filters/list/map on small screens.
-- **No deploy.** Once we ship to Vercel/Netlify, FB/Open Graph previews will start working (FB's scraper needs a public URL).
-- **No reviews / ratings / sale-status updates from the owner** ("running late", "everything's gone", etc.).
+- **No deploy yet.** README has the Vercel walk-through — Missa needs to push the button and configure Supabase + Mapbox URL allowlists for the production domain. Once shipped, FB/Open Graph previews start working (FB's scraper needs a public URL).
+- **No reviews / ratings.**
 - **Mapbox Optimization caps at 11 stops** (12 coords with start). For larger routes we'd need to chunk or fall back to a heuristic.
 
 ---
@@ -170,3 +173,5 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 - **"Let's go!" wording** for the save-to-wishlist button — Missa's preference, kept verbatim across cards, popovers, and the detail page.
 - **`route_date` lives on the route, not on stops.** A route is for a single day; stops inherit that day implicitly.
 - **Sale photos cleanup is best-effort.** When a sale is deleted, the client tries to remove its photos from storage but doesn't block on failure.
+- **Status `closed` hides from browse but not from `/my-sales`.** Owner can revert it to `open` at any time. Past sales (date-based) and closed sales (status-based) are both excluded from the public map.
+- **Realtime channels** are owned by the page/layout that subscribes; teardown happens in `onBeforeUnmount` via `supabase.removeChannel(channel)`. Don't forget this when adding new subscribers — leaked channels burn Supabase realtime quota.

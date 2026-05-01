@@ -53,7 +53,7 @@ async function onLetsGo(ev: Event) {
                 class="h-16 w-16 shrink-0 rounded-lg object-cover ring-1 ring-orange-100 sm:h-20 sm:w-20"
             />
             <div class="min-w-0 flex-1">
-                <div class="mb-1 flex items-center gap-2">
+                <div class="mb-1 flex flex-wrap items-center gap-2">
                     <span
                         v-if="status === 'active'"
                         class="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-800"
@@ -65,6 +65,14 @@ async function onLetsGo(ev: Event) {
                         class="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-800"
                     >
                         Upcoming
+                    </span>
+                    <span
+                        v-if="sale.status !== 'open'"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        :class="statusBadgeClass(sale.status)"
+                    >
+                        <span>{{ statusOption(sale.status).icon }}</span>
+                        {{ statusOption(sale.status).short }}
                     </span>
                 </div>
                 <h3 class="truncate font-display text-base font-bold text-gray-900">

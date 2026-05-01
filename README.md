@@ -29,10 +29,31 @@ Brand:
     - `0003_storage_sale_photos.sql` — public photo bucket + RLS
     - `0004_profiles.sql` — profile table + signup trigger + backfill
     - `0005_messaging.sql` — contact toggle + message threads + RLS
+    - `0006_sale_status.sql` — owner status column on sales
+    - `0007_realtime_messaging.sql` — adds messaging tables to the Supabase Realtime publication
 4. In Supabase, enable email confirmation OR manually confirm your test user under **Authentication → Users**.
 5. `npm run dev` and open http://localhost:3000
 
 To seed test sales, edit `scripts/seed-data.json` (each entry needs a real `user_id` UUID) and run `node scripts/seed-sales.mjs`. The script geocodes each address via Mapbox before inserting.
+
+## Deploy to Vercel
+
+Nuxt's Nitro engine auto-detects Vercel — no `vercel.json` needed.
+
+1. **Push to GitHub** (already configured: `origin = melissapula/garage-sales`).
+2. In the Vercel dashboard, click **New Project** and import the GitHub repo. Framework should auto-detect as **Nuxt**.
+3. Under **Environment Variables**, add:
+    - `SUPABASE_URL`
+    - `SUPABASE_KEY`
+    - `SUPABASE_SERVICE_ROLE_KEY` (only needed if you run the seed script via Vercel; usually skip)
+    - `MAPBOX_TOKEN`
+    - `PUBLIC_SITE_URL` — set to your Vercel domain (e.g. `https://garage-sales.vercel.app`)
+4. **Deploy**.
+5. **Configure Supabase Auth URLs.** In the Supabase dashboard → **Authentication → URL Configuration**:
+    - **Site URL:** your Vercel domain
+    - **Redirect URLs (allow list):** add the Vercel domain plus `https://your-domain/confirm`, `https://your-domain/reset-password`. (Keep `http://localhost:3000` entries for local dev.)
+6. **Mapbox token URL restrictions** (recommended). In your Mapbox account → tokens → restrict the public token's URL allowlist to your Vercel domain plus `localhost`.
+7. **Verify Open Graph previews** by pasting a sale URL into Facebook's [Sharing Debugger](https://developers.facebook.com/tools/debug/) and clicking *Scrape Again*. The preview should pull the sale's title, address, dates, and first photo.
 
 ## Features
 
@@ -59,10 +80,13 @@ To seed test sales, edit `scripts/seed-data.json` (each entry needs a real `user
 
 `/sale/[id]` — public.
 
-- Photo gallery, dates, address, description.
+- Photo gallery with click-to-open lightbox (arrow keys, swipe, click outside, Esc).
+- Dates, address, description.
+- Owner status banner ("Running late", "Winding down") when set.
 - "Let's go!" / "On your list — remove?" toggle.
 - "Message owner" button (shown only if signed in, not the owner, and contact-enabled).
 - Owner-only Edit/Delete buttons. Delete also cleans up photos from storage.
+- Owner-only status pills (Open / Running late / Winding down / Closed early). "Closed early" hides the sale from the browse map.
 - Open Graph meta tags for rich link previews on Facebook/Messenger/Discord.
 - "Share to Facebook" (FB sharer URL) + "Copy link" buttons.
 
@@ -100,6 +124,11 @@ To seed test sales, edit `scripts/seed-data.json` (each entry needs a real `user
 - Thread page shows messages as bubbles (yours right-aligned in orange, theirs left-aligned in cream), Enter-to-send compose box (4000-char cap), auto-marks unread messages read on view.
 - Started by clicking "Message owner" on a sale's detail page — finds-or-creates a thread for that (you, owner, sale) tuple.
 - Navbar shows an unread-count badge that updates on sign-in/out and after each thread visit.
+- **Realtime** — incoming messages stream in via Supabase Realtime; the inbox list and unread badge also update live without refreshing.
+
+### Account
+
+`/account` — auth-required. Edit your display name (the one shown in messages).
 
 ### Lifecycle
 
@@ -115,7 +144,7 @@ app/
   assets/css/tailwind.css
   components/
     BrowseFilters.vue, BrowseSaleCard.vue, BrowseSaleDetail.vue,
-    BrowseMap.vue, RouteMap.vue, PhotoUploader.vue
+    BrowseMap.vue, RouteMap.vue, PhotoUploader.vue, PhotoLightbox.vue
   composables/
     useGarageSales.ts, useSavedSales.ts, useRoutes.ts,
     useRouteOptimizer.ts, useGeocode.ts, useMessaging.ts,
@@ -124,12 +153,12 @@ app/
   pages/
     index.vue, browse.vue, login.vue, signup.vue,
     forgot-password.vue, reset-password.vue, confirm.vue,
-    my-sales.vue, post.vue, post/[id].vue, sale/[id].vue,
+    account.vue, my-sales.vue, post.vue, post/[id].vue, sale/[id].vue,
     itineraries/index.vue, itineraries/[id].vue,
     inbox/index.vue, inbox/[id].vue
-  utils/saleStatus.ts, utils/filters.ts
+  utils/saleStatus.ts, utils/filters.ts, utils/ownerStatus.ts
 scripts/
   seed-sales.mjs, seed-data.example.json
 supabase/migrations/
-  0001_init.sql … 0005_messaging.sql
+  0001_init.sql … 0007_realtime_messaging.sql
 ```
