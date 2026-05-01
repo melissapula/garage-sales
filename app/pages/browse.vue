@@ -56,22 +56,9 @@ const upcomingCount = computed(
 <template>
     <section class="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
         <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <div>
-                <h1 class="font-display text-2xl font-bold text-gray-900 sm:text-3xl">
-                    Browse garage sales
-                </h1>
-                <p class="mt-1 text-sm text-gray-600">
-                    <span class="inline-flex items-center gap-1">
-                        <span class="h-2 w-2 rounded-full" style="background: #22c55e" />
-                        {{ activeCount }} happening today
-                    </span>
-                    <span class="mx-2 text-gray-300">·</span>
-                    <span class="inline-flex items-center gap-1">
-                        <span class="h-2 w-2 rounded-full" style="background: #eab308" />
-                        {{ upcomingCount }} upcoming
-                    </span>
-                </p>
-            </div>
+            <h1 class="font-display text-2xl font-bold text-gray-900 sm:text-3xl">
+                Browse garage sales
+            </h1>
             <button
                 class="text-sm text-sky-700 hover:underline"
                 :disabled="pending"
@@ -138,7 +125,10 @@ const upcomingCount = computed(
             </div>
 
             <!-- RIGHT: Map -->
-            <div :class="{ 'hidden lg:block': mobileTab !== 'map' }" class="min-h-[60vh]">
+            <div
+                :class="{ 'hidden lg:block': mobileTab !== 'map' }"
+                class="relative min-h-[60vh]"
+            >
                 <ClientOnly>
                     <BrowseMap
                         :sales="filteredSales"
@@ -157,6 +147,22 @@ const upcomingCount = computed(
                         </div>
                     </template>
                 </ClientOnly>
+
+                <!-- Map legend overlay -->
+                <div
+                    class="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-white/95 px-3 py-2 text-xs shadow-md ring-1 ring-orange-100"
+                >
+                    <div class="flex items-center gap-1.5 text-gray-700">
+                        <span class="h-2 w-2 rounded-full" style="background: #22c55e" />
+                        <span class="font-medium">{{ activeCount }}</span>
+                        <span>today</span>
+                    </div>
+                    <div class="mt-1 flex items-center gap-1.5 text-gray-700">
+                        <span class="h-2 w-2 rounded-full" style="background: #eab308" />
+                        <span class="font-medium">{{ upcomingCount }}</span>
+                        <span>upcoming</span>
+                    </div>
+                </div>
             </div>
         </div>
 
