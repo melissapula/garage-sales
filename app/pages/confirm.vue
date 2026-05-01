@@ -30,7 +30,9 @@ async function processCallback() {
             error.value = err.message
             return
         }
-        router.push('/browse')
+        // Recovery (password reset) → land on the reset-password form.
+        // Signup / email change / other → straight into the app.
+        router.push(otpType === 'recovery' ? '/reset-password' : '/browse')
         return
     }
 
@@ -45,9 +47,20 @@ async function processCallback() {
             return
         }
         // Most common case: cross-device click. The email confirmation has
-        // succeeded server-side, the user just needs to sign in fresh here.
+        // succeeded server-side; the user just needs to sign in fresh here.
         router.push('/login?confirmed=1')
         return
+    }
+
+    // Implicit flow recovery sometimes arrives with `?type=recovery` in the
+    // URL while the session lands in the hash. If we have a session by now
+    // and the type indicates recovery, send them to the reset form.
+    if (otpType === 'recovery') {
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+            router.push('/reset-password')
+            return
+        }
     }
 
     // 4. Implicit flow: hash tokens auto-detected by the client on init.
