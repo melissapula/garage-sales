@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        font-family: 'DM Sans', system-ui, sans-serif;
+        background-color: #fffbeb;
+        color: #1f2937;
+    }
+
+    h1,
+    h2,
+    h3 {
+        font-family: 'Playfair Display', serif;
+    }
+}
+
+.drag-ghost {
+    opacity: 0.4;
+    background: #fff7ed !important;
+    border: 2px dashed #f97316 !important;
+}
+
+.drag-chosen {
+    cursor: grabbing !important;
+}
+
+@layer components {
+    .btn-primary {
+        @apply inline-flex min-h-[44px] items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 font-medium text-white shadow-sm transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2;
+    }
+
+    .btn-secondary {
+        @apply inline-flex min-h-[44px] items-center justify-center rounded-lg border border-sky-500 bg-white px-5 py-2.5 font-medium text-sky-700 transition hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2;
+    }
+
+    .input {
+        @apply block w-full min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    }
+}

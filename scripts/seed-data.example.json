@@ -1,0 +1,21 @@
+[
+    {
+        "user_id": "be845765-0840-4214-92fb-329bf62a8bc0",
+        "title": "Multi-family yard sale",
+        "description": "Furniture, kids' clothes, tools, kitchen stuff.",
+        "address": "1234 Birchmont Dr NE, Bemidji, MN",
+        "start_date": "2026-05-02",
+        "end_date": "2026-05-03",
+        "start_time": "08:00",
+        "end_time": "16:00"
+    },
+    {
+        "user_id": "be845765-0840-4214-92fb-329bf62a8bc0",
+        "title": "Estate sale — everything must go",
+        "address": "501 Beltrami Ave NW, Bemidji, MN",
+        "start_date": "2026-05-09",
+        "end_date": "2026-05-10",
+        "start_time": "09:00",
+        "end_time": "15:00"
+    }
+]

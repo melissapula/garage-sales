@@ -1,0 +1,105 @@
+<script setup lang="ts">
+const props = defineProps<{
+    modelValue: string[]
+}>()
+
+const emit = defineEmits<{
+    (e: 'update:modelValue', urls: string[]): void
+}>()
+
+const { uploadPhoto, deletePhotos } = useSalePhotos()
+
+const fileInput = ref<HTMLInputElement | null>(null)
+const uploading = ref(false)
+const error = ref<string | null>(null)
+
+async function onPicked(ev: Event) {
+    const input = ev.target as HTMLInputElement
+    if (!input.files || input.files.length === 0) return
+    error.value = null
+    uploading.value = true
+    try {
+        const newUrls: string[] = []
+        for (const file of Array.from(input.files)) {
+            if (!file.type.startsWith('image/')) {
+                error.value = `${file.name} isn't an image — skipped.`
+                continue
+            }
+            const url = await uploadPhoto(file)
+            newUrls.push(url)
+        }
+        emit('update:modelValue', [...props.modelValue, ...newUrls])
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : 'Upload failed'
+    } finally {
+        uploading.value = false
+        if (fileInput.value) fileInput.value.value = ''
+    }
+}
+
+async function removeAt(idx: number) {
+    const url = props.modelValue[idx]
+    if (!url) return
+    const next = props.modelValue.slice()
+    next.splice(idx, 1)
+    emit('update:modelValue', next)
+    // Delete from storage in the background — failures here are non-blocking.
+    deletePhotos([url]).catch(() => {})
+}
+
+function pick() {
+    fileInput.value?.click()
+}
+</script>
+
+<template>
+    <div>
+        <div v-if="modelValue.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div
+                v-for="(url, i) in modelValue"
+                :key="url"
+                class="group relative aspect-square overflow-hidden rounded-lg bg-gray-100 ring-1 ring-orange-100"
+            >
+                <img :src="url" class="h-full w-full object-cover" :alt="`Photo ${i + 1}`" />
+                <button
+                    type="button"
+                    class="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
+                    aria-label="Remove photo"
+                    @click="removeAt(i)"
+                >
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+            <input
+                ref="fileInput"
+                type="file"
+                accept="image/*"
+                multiple
+                class="sr-only"
+                @change="onPicked"
+            />
+            <button
+                type="button"
+                class="btn-secondary !min-h-[40px] !px-4 !py-2 text-sm"
+                :disabled="uploading"
+                @click="pick"
+            >
+                {{ uploading ? 'Uploading…' : modelValue.length ? '+ Add more photos' : '+ Add photos' }}
+            </button>
+            <span v-if="modelValue.length" class="text-xs text-gray-500">
+                {{ modelValue.length }} photo{{ modelValue.length === 1 ? '' : 's' }}
+            </span>
+        </div>
+
+        <p v-if="error" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {{ error }}
+        </p>
+    </div>
+</template>

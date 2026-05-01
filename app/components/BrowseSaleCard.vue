@@ -1,0 +1,97 @@
+<script setup lang="ts">
+import type { GarageSale } from '~/composables/useGarageSales'
+
+const props = defineProps<{
+    sale: GarageSale
+    /** Whether this card is currently the selected/highlighted one. */
+    selected?: boolean
+}>()
+
+const emit = defineEmits<{
+    (e: 'select', saleId: string): void
+    (e: 'hover', saleId: string | null): void
+}>()
+
+const user = useSupabaseUser()
+const { isSaved, save } = useSavedSales()
+
+const status = computed(() => saleStatus(props.sale))
+const dateRange = computed(() => formatDateRange(props.sale.start_date, props.sale.end_date))
+const timeRange = computed(() => formatTimeRange(props.sale.start_time, props.sale.end_time))
+
+function onClick() {
+    emit('select', props.sale.id)
+}
+
+const saving = ref(false)
+async function onLetsGo(ev: Event) {
+    ev.stopPropagation()
+    if (!user.value) {
+        navigateTo('/login')
+        return
+    }
+    saving.value = true
+    await save(props.sale.id)
+    saving.value = false
+}
+</script>
+
+<template>
+    <article
+        class="cursor-pointer rounded-xl bg-white p-3 ring-1 transition hover:shadow-md sm:p-4"
+        :class="selected ? 'ring-2 ring-brand-500' : 'ring-orange-100'"
+        @click="onClick"
+        @mouseenter="emit('hover', sale.id)"
+        @mouseleave="emit('hover', null)"
+    >
+        <div class="flex items-start gap-3">
+            <img
+                v-if="sale.photos && sale.photos.length"
+                :src="sale.photos[0]"
+                :alt="sale.title"
+                loading="lazy"
+                class="h-16 w-16 shrink-0 rounded-lg object-cover ring-1 ring-orange-100 sm:h-20 sm:w-20"
+            />
+            <div class="min-w-0 flex-1">
+                <div class="mb-1 flex items-center gap-2">
+                    <span
+                        v-if="status === 'active'"
+                        class="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-800"
+                    >
+                        Today
+                    </span>
+                    <span
+                        v-else-if="status === 'upcoming'"
+                        class="rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-800"
+                    >
+                        Upcoming
+                    </span>
+                </div>
+                <h3 class="truncate font-display text-base font-bold text-gray-900">
+                    {{ sale.title }}
+                </h3>
+                <p class="mt-0.5 truncate text-sm text-gray-600">{{ sale.address }}</p>
+                <p class="mt-0.5 text-xs text-gray-500">
+                    {{ dateRange }}<span v-if="timeRange"> · {{ timeRange }}</span>
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+            <button
+                v-if="!isSaved(sale.id)"
+                class="flex-1 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
+                :disabled="saving"
+                @click="onLetsGo"
+            >
+                {{ saving ? 'Saving…' : "Let's go!" }}
+            </button>
+            <span
+                v-else
+                class="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700"
+            >
+                ✓ On your list
+            </span>
+        </div>
+    </article>
+</template>
