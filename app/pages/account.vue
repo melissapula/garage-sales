@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
+const router = useRouter()
 
 const { data: profile, refresh } = await useAsyncData(
     'my-profile',
@@ -63,6 +64,58 @@ const memberSince = computed(() =>
           })
         : '',
 )
+
+// =============================================================================
+// Danger zone — delete my account
+// =============================================================================
+const deleteOpen = ref(false)
+const deleteInput = ref('')
+const deleting = ref(false)
+const deleteError = ref<string | null>(null)
+
+const canDelete = computed(() => deleteInput.value.trim().toUpperCase() === 'DELETE')
+
+async function purgeUserPhotos(userId: string) {
+    // List + remove the entire <userId>/ folder in sale-photos.
+    const { data: files } = await supabase.storage
+        .from('sale-photos')
+        .list(userId, { limit: 1000 })
+    if (!files || files.length === 0) return
+    const paths = files.map((f) => `${userId}/${f.name}`)
+    await supabase.storage.from('sale-photos').remove(paths)
+}
+
+function cancelDelete() {
+    deleteOpen.value = false
+    deleteInput.value = ''
+    deleteError.value = null
+}
+
+async function deleteAccount() {
+    if (!user.value || !canDelete.value || deleting.value) return
+    deleting.value = true
+    deleteError.value = null
+    const userId = user.value.id
+    try {
+        // Best-effort photo cleanup while the session is still valid.
+        try {
+            await purgeUserPhotos(userId)
+        } catch {
+            // Non-blocking — DB cascade still runs even if storage fails.
+        }
+
+        // Cascade-deletes everything tied to this user via the RPC.
+        const { error } = await supabase.rpc('delete_my_account')
+        if (error) throw error
+
+        // Session is now invalid; signOut clears the local session state.
+        await supabase.auth.signOut()
+        await router.push('/?account_deleted=1')
+    } catch (e) {
+        deleteError.value = e instanceof Error ? e.message : 'Could not delete account'
+        deleting.value = false
+    }
+}
 </script>
 
 <template>
@@ -121,5 +174,59 @@ const memberSince = computed(() =>
                 </button>
             </div>
         </form>
+
+        <!-- Danger zone -->
+        <section class="mt-10 rounded-xl border border-red-200 bg-red-50 p-5">
+            <h2 class="font-display text-lg font-bold text-red-900">Delete account</h2>
+            <p class="mt-1 text-sm text-red-800">
+                Permanently delete your account along with every sale you've posted, every saved
+                sale, every route you've planned, and every conversation you've had. This can't
+                be undone.
+            </p>
+
+            <button
+                v-if="!deleteOpen"
+                type="button"
+                class="mt-4 inline-flex min-h-[40px] items-center rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                @click="deleteOpen = true"
+            >
+                Delete my account
+            </button>
+
+            <div v-else class="mt-4 space-y-3">
+                <p class="text-sm text-red-900">
+                    To confirm, type <strong class="font-mono">DELETE</strong> below.
+                </p>
+                <input
+                    v-model="deleteInput"
+                    placeholder="Type DELETE to confirm"
+                    class="input border-red-300 focus:border-red-500 focus:ring-red-500"
+                />
+                <p
+                    v-if="deleteError"
+                    class="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800"
+                >
+                    {{ deleteError }}
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="inline-flex min-h-[44px] items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="!canDelete || deleting"
+                        @click="deleteAccount"
+                    >
+                        {{ deleting ? 'Deleting…' : 'Permanently delete account' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex min-h-[44px] items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                        :disabled="deleting"
+                        @click="cancelDelete"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </section>
     </section>
 </template>
