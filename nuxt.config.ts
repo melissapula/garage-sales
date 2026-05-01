@@ -41,6 +41,19 @@ export default defineNuxtConfig({
     },
 
     supabase: {
+        // Use implicit flow so email confirmation works cross-device.
+        // PKCE (the default) stashes a code_verifier in localStorage at signup
+        // and requires the confirmation link to be opened in the same browser.
+        // Implicit puts session tokens directly in the URL hash, which any
+        // device can pick up.
+        clientOptions: {
+            auth: {
+                flowType: 'implicit',
+                detectSessionInUrl: true,
+                persistSession: true,
+                autoRefreshToken: true,
+            },
+        },
         redirectOptions: {
             login: '/login',
             callback: '/confirm',
