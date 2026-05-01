@@ -30,6 +30,13 @@ export default defineNuxtConfig({
                     href: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap',
                 },
             ],
+            script: [
+                {
+                    defer: true,
+                    src: 'https://static.cloudflareinsights.com/beacon.min.js',
+                    'data-cf-beacon': '{"token": "e1e7986eef5646efa6ae3c134aa1113a"}',
+                },
+            ],
         },
     },
 
