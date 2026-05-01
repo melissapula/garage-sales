@@ -416,12 +416,12 @@ const routeDateLabel = computed(() => {
                             >
                                 <button
                                     type="button"
-                                    class="drag-handle mt-1 -ml-1 cursor-grab touch-none text-gray-400 hover:text-gray-700 active:cursor-grabbing"
+                                    class="drag-handle -ml-1 flex h-11 w-9 cursor-grab touch-none items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
                                     aria-label="Drag to reorder"
                                     @click.prevent
                                 >
                                     <svg
-                                        class="h-5 w-5"
+                                        class="h-6 w-6"
                                         viewBox="0 0 20 20"
                                         fill="currentColor"
                                     >

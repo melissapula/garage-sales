@@ -51,7 +51,7 @@ function actionHtml(sale: GarageSale): string {
     if (isSaved(sale.id)) {
         return `<span style="display:inline-flex;align-items:center;gap:4px;color:#15803d;font-size:13px;font-weight:600;">✓ On your list</span>`
     }
-    return `<button type="button" data-lets-go="${sale.id}" style="display:inline-flex;align-items:center;gap:4px;background:#F97316;color:white;border:0;border-radius:6px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Let's go!</button>`
+    return `<button type="button" data-lets-go="${sale.id}" style="display:inline-flex;align-items:center;justify-content:center;gap:4px;background:#F97316;color:white;border:0;border-radius:8px;padding:10px 14px;min-height:40px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Let's go!</button>`
 }
 
 function buildPopupHtml(sale: GarageSale, withCloseButton: boolean): string {
