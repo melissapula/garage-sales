@@ -5,13 +5,15 @@ const config = useRuntimeConfig()
 const email = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
+const alreadyExists = ref(false)
 const loading = ref(false)
 const sent = ref(false)
 
 async function submit() {
     error.value = null
+    alreadyExists.value = false
     loading.value = true
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
         options: {
@@ -21,6 +23,13 @@ async function submit() {
     loading.value = false
     if (err) {
         error.value = err.message
+        return
+    }
+    // Supabase doesn't return an error when the email is already registered
+    // (a security default to prevent enumeration). The signal is that the
+    // returned user has no identities. Surface it as a friendly hint.
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        alreadyExists.value = true
         return
     }
     sent.value = true
@@ -36,6 +45,26 @@ async function submit() {
             <p class="font-medium">Check your email.</p>
             <p class="mt-1 text-sm">
                 We sent a confirmation link to <strong>{{ email }}</strong>.
+            </p>
+        </div>
+
+        <div
+            v-else-if="alreadyExists"
+            class="mt-8 rounded-lg bg-amber-50 p-4 text-amber-900"
+        >
+            <p class="font-medium">An account with this email already exists.</p>
+            <p class="mt-1 text-sm">
+                <NuxtLink to="/login" class="font-semibold text-sky-700 hover:underline">
+                    Sign in
+                </NuxtLink>
+                instead, or
+                <NuxtLink
+                    to="/forgot-password"
+                    class="font-semibold text-sky-700 hover:underline"
+                >
+                    reset your password
+                </NuxtLink>
+                if you forgot it.
             </p>
         </div>
 
