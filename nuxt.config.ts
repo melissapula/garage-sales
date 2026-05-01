@@ -11,13 +11,13 @@ export default defineNuxtConfig({
 
     app: {
         head: {
-            title: 'Bemidji Garage Sales',
+            title: 'Garage Sale Tracker',
             meta: [
                 { name: 'viewport', content: 'width=device-width, initial-scale=1' },
                 {
                     name: 'description',
                     content:
-                        'Find and post garage sales in Bemidji and the surrounding area. Build an itinerary and get the best route to hit them all.',
+                        'Find and post garage sales near you. Build an itinerary and get the best route to hit them all.',
                 },
                 { name: 'theme-color', content: '#F97316' },
             ],

@@ -618,7 +618,7 @@ const routeDateLabel = computed(() => {
                         <div v-else class="mt-2 flex flex-col gap-2 sm:flex-row">
                             <input
                                 v-model="startAddress"
-                                placeholder="123 Main St, Bemidji"
+                                placeholder="123 Main St, City, State"
                                 class="input flex-1"
                                 :disabled="geocodingStart"
                             />

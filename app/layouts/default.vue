@@ -70,7 +70,7 @@ async function signOut() {
                     to="/"
                     class="font-display text-lg font-bold text-brand-600 sm:text-xl"
                 >
-                    Bemidji Garage Sales
+                    Garage Sale Tracker
                 </NuxtLink>
 
                 <!-- Desktop nav -->
@@ -264,7 +264,7 @@ async function signOut() {
 
         <footer class="border-t border-orange-100 bg-white">
             <div class="mx-auto max-w-6xl px-4 py-6 text-sm text-gray-500">
-                <p>Bemidji Garage Sales — find and route the weekend's best stops.</p>
+                <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
             </div>
         </footer>
     </div>

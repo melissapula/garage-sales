@@ -28,7 +28,7 @@ const config = useRuntimeConfig()
 const shareUrl = computed(() => `${config.public.siteUrl}/sale/${id}`)
 
 useSeoMeta({
-    title: () => (sale.value ? `${sale.value.title} — Bemidji Garage Sales` : 'Garage sale'),
+    title: () => (sale.value ? `${sale.value.title} — Garage Sale Tracker` : 'Garage sale'),
     description: () =>
         sale.value
             ? `${sale.value.title} at ${sale.value.address}. ${formatDateRange(sale.value.start_date, sale.value.end_date)}.`
@@ -301,7 +301,7 @@ async function deleteSale() {
             <div class="mt-8 border-t border-orange-100 pt-6">
                 <h2 class="font-display text-lg font-bold text-gray-900">Share this sale</h2>
                 <p class="mt-1 text-sm text-gray-600">
-                    Posting to a Bemidji garage sale group? Share the link and pick the group when
+                    Posting to a garage sale group? Share the link and pick the group when
                     Facebook opens.
                 </p>
                 <div class="mt-3 flex flex-wrap gap-2">

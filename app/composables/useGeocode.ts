@@ -4,9 +4,6 @@ export interface GeocodeResult {
     lng: number
 }
 
-// Bias geocoding toward Bemidji, MN
-const BEMIDJI_PROXIMITY = '-94.8826,47.4716'
-
 /** Resolve coordinates → human-readable address via Mapbox reverse geocoding. */
 export async function reverseGeocode(lng: number, lat: number): Promise<string | null> {
     const config = useRuntimeConfig()
@@ -33,7 +30,10 @@ export async function geocodeAddress(query: string): Promise<GeocodeResult | nul
 
     const url = new URL('https://api.mapbox.com/search/geocode/v6/forward')
     url.searchParams.set('q', query)
-    url.searchParams.set('proximity', BEMIDJI_PROXIMITY)
+    // Bias results to the user's general area via Mapbox's IP-based proximity,
+    // so "123 Main St" picks the local match for whoever is typing instead of
+    // always preferring one hardcoded city.
+    url.searchParams.set('proximity', 'ip')
     url.searchParams.set('country', 'us')
     url.searchParams.set('limit', '1')
     url.searchParams.set('access_token', token)

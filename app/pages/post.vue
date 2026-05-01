@@ -147,7 +147,7 @@ async function submit() {
                         id="address"
                         v-model="addressInput"
                         required
-                        placeholder="123 Main St, Bemidji, MN"
+                        placeholder="123 Main St, City, State"
                         class="input flex-1"
                     />
                     <button

@@ -32,7 +32,7 @@ async function submit() {
 <template>
     <section class="mx-auto max-w-md px-4 py-10 sm:py-16">
         <h1 class="font-display text-3xl font-bold text-gray-900">Sign in</h1>
-        <p class="mt-2 text-gray-600">Welcome back to Bemidji Garage Sales.</p>
+        <p class="mt-2 text-gray-600">Welcome back to Garage Sale Tracker.</p>
 
         <div
             v-if="justConfirmed"

@@ -7,13 +7,13 @@ const user = useSupabaseUser()
         <div class="grid gap-10 sm:grid-cols-2 sm:items-center">
             <div>
                 <h1 class="font-display text-4xl font-bold leading-tight text-gray-900 sm:text-5xl">
-                    Bemidji's
+                    The
                     <span class="text-brand-500">garage sale</span>
                     map.
                 </h1>
                 <p class="mt-4 text-lg text-gray-700">
-                    Find every yard, garage, and estate sale happening this weekend. Pick the ones
-                    you want to hit and we'll plan the best route.
+                    Find every yard, garage, and estate sale near you. Pick the ones you want to
+                    hit and we'll plan the best route.
                 </p>
                 <div class="mt-8 flex flex-wrap gap-3">
                     <NuxtLink to="/browse" class="btn-primary"> Browse the map </NuxtLink>
