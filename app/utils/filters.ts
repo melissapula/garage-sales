@@ -2,13 +2,41 @@ import type { GarageSale } from '~/composables/useGarageSales'
 
 export type TimeBucket = 'morning' | 'afternoon' | 'evening'
 
+export interface FilterLocation {
+    lat: number
+    lng: number
+    label: string
+}
+
 export interface BrowseFiltersValue {
     days: string[]
     timeBuckets: TimeBucket[]
+    location: FilterLocation | null
+    radiusMiles: number
 }
 
+export const RADIUS_OPTIONS = [10, 25, 50, 100] as const
+
 export function emptyFilters(): BrowseFiltersValue {
-    return { days: [], timeBuckets: [] }
+    return { days: [], timeBuckets: [], location: null, radiusMiles: 25 }
+}
+
+/** Great-circle distance in miles between two lat/lng points. */
+export function haversineMiles(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+): number {
+    const R = 3958.8
+    const toRad = (deg: number) => (deg * Math.PI) / 180
+    const dLat = toRad(lat2 - lat1)
+    const dLng = toRad(lng2 - lng1)
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
 }
 
 function saleSpansDay(sale: GarageSale, iso: string): boolean {
@@ -42,6 +70,15 @@ export function applyFilters(sales: GarageSale[], filters: BrowseFiltersValue): 
         }
         if (filters.timeBuckets.length > 0) {
             if (!filters.timeBuckets.some((b) => saleMatchesBucket(sale, b))) return false
+        }
+        if (filters.location) {
+            const dist = haversineMiles(
+                filters.location.lat,
+                filters.location.lng,
+                sale.lat,
+                sale.lng,
+            )
+            if (dist > filters.radiusMiles) return false
         }
         return true
     })

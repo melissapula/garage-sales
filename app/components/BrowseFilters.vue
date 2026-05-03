@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import type { GarageSale } from '~/composables/useGarageSales'
-
-export interface BrowseFiltersValue {
-    /** ISO date strings (YYYY-MM-DD) the user has checked. Empty = no day filter. */
-    days: string[]
-    /** Time-of-day buckets the user has checked. Empty = no time filter. */
-    timeBuckets: ('morning' | 'afternoon' | 'evening')[]
-}
+import {
+    type BrowseFiltersValue,
+    type FilterLocation,
+    RADIUS_OPTIONS,
+    emptyFilters,
+} from '~/utils/filters'
 
 const props = defineProps<{
     sales: GarageSale[]
@@ -17,7 +16,9 @@ const emit = defineEmits<{
     (e: 'update:modelValue', v: BrowseFiltersValue): void
 }>()
 
-// Build the list of unique days that appear in the data.
+// =============================================================================
+// Day filter
+// =============================================================================
 const availableDays = computed(() => {
     const set = new Set<string>()
     for (const s of props.sales) {
@@ -47,6 +48,9 @@ function toggleDay(iso: string) {
     emit('update:modelValue', { ...props.modelValue, days })
 }
 
+// =============================================================================
+// Time-of-day filter
+// =============================================================================
 const TIME_BUCKETS = [
     { id: 'morning' as const, label: 'Morning', sub: 'before noon' },
     { id: 'afternoon' as const, label: 'Afternoon', sub: 'noon – 5pm' },
@@ -60,12 +64,70 @@ function toggleBucket(b: 'morning' | 'afternoon' | 'evening') {
     emit('update:modelValue', { ...props.modelValue, timeBuckets: next })
 }
 
+// =============================================================================
+// Location filter
+// =============================================================================
+const locationInput = ref('')
+const findingLocation = ref(false)
+const locationError = ref<string | null>(null)
+
+async function useMyLocation() {
+    locationError.value = null
+    findingLocation.value = true
+    try {
+        const pos = await getCurrentPosition()
+        const label = (await reverseGeocode(pos.lng, pos.lat)) ?? 'Your location'
+        setLocation({ lat: pos.lat, lng: pos.lng, label })
+    } catch (e) {
+        locationError.value = e instanceof Error ? e.message : 'Could not get location'
+    } finally {
+        findingLocation.value = false
+    }
+}
+
+async function searchLocation() {
+    locationError.value = null
+    if (!locationInput.value.trim()) return
+    findingLocation.value = true
+    try {
+        const result = await geocodeAddress(locationInput.value.trim())
+        if (!result) {
+            locationError.value = "Couldn't find that location."
+            return
+        }
+        setLocation({ lat: result.lat, lng: result.lng, label: result.address })
+        locationInput.value = ''
+    } catch (e) {
+        locationError.value = e instanceof Error ? e.message : 'Search failed'
+    } finally {
+        findingLocation.value = false
+    }
+}
+
+function setLocation(location: FilterLocation) {
+    emit('update:modelValue', { ...props.modelValue, location })
+}
+
+function clearLocation() {
+    emit('update:modelValue', { ...props.modelValue, location: null })
+}
+
+function setRadius(miles: number) {
+    emit('update:modelValue', { ...props.modelValue, radiusMiles: miles })
+}
+
+// =============================================================================
+// Clear-all
+// =============================================================================
 const hasFilters = computed(
-    () => props.modelValue.days.length > 0 || props.modelValue.timeBuckets.length > 0,
+    () =>
+        props.modelValue.days.length > 0 ||
+        props.modelValue.timeBuckets.length > 0 ||
+        props.modelValue.location !== null,
 )
 
 function clearAll() {
-    emit('update:modelValue', { days: [], timeBuckets: [] })
+    emit('update:modelValue', emptyFilters())
 }
 </script>
 
@@ -82,6 +144,87 @@ function clearAll() {
             </button>
         </div>
 
+        <!-- Location -->
+        <div>
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Location
+            </h3>
+
+            <div
+                v-if="modelValue.location"
+                class="flex items-start justify-between gap-2 rounded-lg bg-orange-50 px-3 py-2 text-sm text-gray-800"
+            >
+                <span class="min-w-0 flex-1 truncate">📍 {{ modelValue.location.label }}</span>
+                <button
+                    class="shrink-0 text-xs text-red-600 hover:underline"
+                    @click="clearLocation"
+                >
+                    Clear
+                </button>
+            </div>
+
+            <template v-else>
+                <button
+                    type="button"
+                    class="inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-sky-500 bg-white px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+                    :disabled="findingLocation"
+                    @click="useMyLocation"
+                >
+                    {{ findingLocation ? 'Finding…' : '📍 Use my location' }}
+                </button>
+                <form class="mt-2 flex gap-2" @submit.prevent="searchLocation">
+                    <input
+                        v-model="locationInput"
+                        placeholder="City or zip"
+                        class="input flex-1 !min-h-[40px] !text-sm"
+                        :disabled="findingLocation"
+                    />
+                    <button
+                        type="submit"
+                        class="rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        :disabled="findingLocation || !locationInput.trim()"
+                    >
+                        Find
+                    </button>
+                </form>
+            </template>
+
+            <p
+                v-if="locationError"
+                class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
+            >
+                {{ locationError }}
+            </p>
+
+            <div class="mt-3">
+                <p class="mb-1.5 text-xs text-gray-600">Within</p>
+                <div class="flex flex-wrap gap-1">
+                    <button
+                        v-for="r in RADIUS_OPTIONS"
+                        :key="r"
+                        type="button"
+                        class="rounded-full border px-3 py-1 text-xs font-semibold transition"
+                        :class="
+                            modelValue.radiusMiles === r
+                                ? 'border-brand-500 bg-brand-500 text-white'
+                                : 'border-gray-200 bg-white text-gray-700 hover:border-brand-300'
+                        "
+                        :disabled="!modelValue.location"
+                        @click="setRadius(r)"
+                    >
+                        {{ r }} mi
+                    </button>
+                </div>
+                <p
+                    v-if="!modelValue.location"
+                    class="mt-1 text-xs text-gray-400"
+                >
+                    Set a location first.
+                </p>
+            </div>
+        </div>
+
+        <!-- Day -->
         <div>
             <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Day</h3>
             <ul class="space-y-1.5">
@@ -102,6 +245,7 @@ function clearAll() {
             </ul>
         </div>
 
+        <!-- Time -->
         <div>
             <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Time</h3>
             <ul class="space-y-1.5">
