@@ -90,7 +90,9 @@ const upcomingCount = computed(
         </nav>
 
         <!-- 3-column desktop / single-pane mobile -->
-        <div class="grid gap-4 lg:grid-cols-[260px_minmax(0,380px)_minmax(0,1fr)]">
+        <div
+            class="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,380px)_minmax(0,1fr)]"
+        >
             <!-- LEFT: Filters -->
             <aside :class="{ 'hidden lg:block': mobileTab !== 'filters' }">
                 <BrowseFilters v-model="filters" :sales="sales ?? []" />

@@ -79,7 +79,7 @@ async function onLetsGo(ev: Event) {
                     {{ sale.title }}
                 </h3>
                 <p class="mt-0.5 truncate text-sm text-gray-600">{{ sale.address }}</p>
-                <p class="mt-0.5 text-xs text-gray-500">
+                <p class="mt-0.5 truncate text-xs text-gray-500">
                     {{ dateRange }}<span v-if="timeRange"> · {{ timeRange }}</span>
                 </p>
             </div>
