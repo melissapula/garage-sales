@@ -105,7 +105,7 @@ const mapsLinks = computed(() => {
             </h1>
             <p class="mt-1 text-gray-600">{{ dateLabel }}</p>
 
-            <div class="mt-6 grid gap-6 lg:grid-cols-[2fr_3fr]">
+            <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_3fr]">
                 <div>
                     <h2 class="font-display text-lg font-bold text-gray-900">
                         Stops ({{ data.stops.length }})
