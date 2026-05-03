@@ -98,14 +98,10 @@ const upcomingCount = computed(
                 </p>
                 <p class="mt-1.5">
                     This app is still evolving — if you'd like a feature added or run into a
-                    bug,
-                    <a
+                    bug, <span class="whitespace-nowrap"><a
                         href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
                         class="font-semibold text-sky-700 hover:underline"
-                    >
-                        reach out
-                    </a>
-                    . I'd love to hear from you.
+                    >reach out</a>.</span> I'd love to hear from you.
                 </p>
             </div>
             <button
