@@ -1,25 +1,55 @@
 <script setup lang="ts">
+import VueHcaptcha from '@hcaptcha/vue3-hcaptcha'
+
 const supabase = useSupabaseClient()
+const config = useRuntimeConfig()
 const router = useRouter()
 const route = useRoute()
+
+const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
+const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
 
 const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
+const captchaToken = ref<string | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(false)
+const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
 
 const justConfirmed = computed(() => route.query.confirmed === '1')
 const passwordType = computed(() => (showPassword.value ? 'text' : 'password'))
+const canSubmit = computed(
+    () =>
+        email.value.length > 0 &&
+        password.value.length > 0 &&
+        (!captchaEnabled.value || captchaToken.value !== null),
+)
+
+function onCaptchaVerify(token: string) {
+    captchaToken.value = token
+}
+function onCaptchaExpired() {
+    captchaToken.value = null
+}
+function onCaptchaError() {
+    captchaToken.value = null
+}
 
 async function submit() {
     error.value = null
+    if (!canSubmit.value) return
     loading.value = true
     const { error: err } = await supabase.auth.signInWithPassword({
         email: email.value,
         password: password.value,
+        options: captchaToken.value ? { captchaToken: captchaToken.value } : undefined,
     })
     loading.value = false
+    if (captchaEnabled.value) {
+        captchaToken.value = null
+        hcaptchaRef.value?.reset()
+    }
     if (err) {
         error.value = err.message
         return
@@ -120,11 +150,25 @@ async function submit() {
                 </div>
             </div>
 
+            <div v-if="captchaEnabled" class="flex justify-center">
+                <VueHcaptcha
+                    ref="hcaptchaRef"
+                    :sitekey="hcaptchaSiteKey"
+                    @verify="onCaptchaVerify"
+                    @expired="onCaptchaExpired"
+                    @error="onCaptchaError"
+                />
+            </div>
+
             <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 {{ error }}
             </p>
 
-            <button type="submit" class="btn-primary w-full" :disabled="loading">
+            <button
+                type="submit"
+                class="btn-primary w-full"
+                :disabled="loading || !canSubmit"
+            >
                 {{ loading ? 'Signing in…' : 'Sign in' }}
             </button>
         </form>
