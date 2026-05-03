@@ -30,3 +30,47 @@ export async function fetchActiveSales() {
     if (error) throw error
     return (data ?? []) as GarageSale[]
 }
+
+export interface OverlapConflict {
+    id: string
+    title: string
+    start_date: string
+    end_date: string
+    address: string
+}
+
+/**
+ * Find an existing active sale at the same coordinates whose date range
+ * overlaps the proposed [startDate, endDate]. Returns null if there's no
+ * conflict.
+ *
+ * Lat/lng are matched within ±0.0001° (~11m) so identical Mapbox geocodes
+ * for the same address still match each other even with tiny float drift.
+ *
+ * `excludeId` lets the edit form skip its own existing row.
+ */
+export async function findOverlappingSale(
+    lat: number,
+    lng: number,
+    startDate: string,
+    endDate: string,
+    excludeId?: string,
+): Promise<OverlapConflict | null> {
+    const supabase = useSupabaseClient()
+    const eps = 0.0001
+    let q = supabase
+        .from('garage_sales')
+        .select('id, title, start_date, end_date, address')
+        .gte('lat', lat - eps)
+        .lte('lat', lat + eps)
+        .gte('lng', lng - eps)
+        .lte('lng', lng + eps)
+        .lte('start_date', endDate)
+        .gte('end_date', startDate)
+        .neq('status', 'closed')
+        .limit(1)
+    if (excludeId) q = q.neq('id', excludeId)
+    const { data, error } = await q
+    if (error) throw error
+    return (data?.[0] as OverlapConflict | undefined) ?? null
+}

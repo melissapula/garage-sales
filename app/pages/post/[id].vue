@@ -99,6 +99,29 @@ async function submit() {
         return
     }
     saving.value = true
+
+    // Reject if another active sale at the same address overlaps these dates,
+    // excluding this sale itself.
+    try {
+        const conflict = await findOverlappingSale(
+            resolved.value!.lat,
+            resolved.value!.lng,
+            startDate.value,
+            endDate.value,
+            id,
+        )
+        if (conflict) {
+            saving.value = false
+            error.value =
+                `Another sale at this address already overlaps these dates: ` +
+                `"${conflict.title}" (${conflict.start_date} – ${conflict.end_date}). ` +
+                `Adjust your dates or contact us if that listing looks wrong.`
+            return
+        }
+    } catch {
+        // If the dup-check call itself fails, don't block — fall through.
+    }
+
     const { error: err } = await supabase
         .from('garage_sales')
         .update({
