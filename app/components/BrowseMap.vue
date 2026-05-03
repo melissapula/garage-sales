@@ -129,6 +129,15 @@ function showPopup(saleId: string, persistent: boolean) {
     if (!persistent) {
         popupEl.addEventListener('mouseenter', clearHoverTimer)
         popupEl.addEventListener('mouseleave', scheduleHoverClose)
+    } else {
+        // For a click-selected pin, ease the map over so the pin is visible.
+        // Don't pan on hover — that's jarring as the cursor moves through the list.
+        map.flyTo({
+            center: [sale.lng, sale.lat],
+            zoom: Math.max(map.getZoom(), 13),
+            duration: 700,
+            essential: true,
+        })
     }
 }
 
