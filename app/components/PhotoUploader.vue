@@ -13,14 +13,16 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const error = ref<string | null>(null)
 
-async function onPicked(ev: Event) {
-    const input = ev.target as HTMLInputElement
-    if (!input.files || input.files.length === 0) return
+const dragActive = ref(false)
+let dragDepth = 0
+
+async function processFiles(files: File[]) {
+    if (files.length === 0) return
     error.value = null
     uploading.value = true
     try {
         const newUrls: string[] = []
-        for (const file of Array.from(input.files)) {
+        for (const file of files) {
             if (!file.type.startsWith('image/')) {
                 error.value = `${file.name} isn't an image — skipped.`
                 continue
@@ -28,7 +30,7 @@ async function onPicked(ev: Event) {
             const url = await uploadPhoto(file)
             newUrls.push(url)
         }
-        emit('update:modelValue', [...props.modelValue, ...newUrls])
+        if (newUrls.length) emit('update:modelValue', [...props.modelValue, ...newUrls])
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Upload failed'
     } finally {
@@ -37,13 +39,43 @@ async function onPicked(ev: Event) {
     }
 }
 
+async function onPicked(ev: Event) {
+    const input = ev.target as HTMLInputElement
+    if (!input.files || input.files.length === 0) return
+    await processFiles(Array.from(input.files))
+}
+
+function onDragEnter(ev: DragEvent) {
+    if (!ev.dataTransfer) return
+    const hasFiles = Array.from(ev.dataTransfer.items ?? []).some((i) => i.kind === 'file')
+    if (!hasFiles) return
+    dragDepth++
+    dragActive.value = true
+}
+
+function onDragOver(ev: DragEvent) {
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'
+}
+
+function onDragLeave() {
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) dragActive.value = false
+}
+
+async function onDrop(ev: DragEvent) {
+    dragDepth = 0
+    dragActive.value = false
+    const files = ev.dataTransfer?.files
+    if (!files || files.length === 0) return
+    await processFiles(Array.from(files))
+}
+
 async function removeAt(idx: number) {
     const url = props.modelValue[idx]
     if (!url) return
     const next = props.modelValue.slice()
     next.splice(idx, 1)
     emit('update:modelValue', next)
-    // Delete from storage in the background — failures here are non-blocking.
     deletePhotos([url]).catch(() => {})
 }
 
@@ -53,7 +85,14 @@ function pick() {
 </script>
 
 <template>
-    <div>
+    <div
+        class="rounded-xl border-2 border-dashed bg-white p-3 transition sm:p-4"
+        :class="dragActive ? 'border-brand-500 bg-orange-50' : 'border-gray-300'"
+        @dragenter.prevent="onDragEnter"
+        @dragover.prevent="onDragOver"
+        @dragleave.prevent="onDragLeave"
+        @drop.prevent="onDrop"
+    >
         <div v-if="modelValue.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4">
             <div
                 v-for="(url, i) in modelValue"
@@ -76,6 +115,27 @@ function pick() {
             </div>
         </div>
 
+        <div
+            v-else
+            class="pointer-events-none flex flex-col items-center justify-center py-6 text-center text-sm text-gray-500"
+        >
+            <svg
+                class="mb-2 h-8 w-8 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                />
+            </svg>
+            <p class="font-medium text-gray-700">Drag photos here</p>
+            <p class="mt-0.5 text-xs">or click below to browse</p>
+        </div>
+
         <div class="mt-3 flex flex-wrap items-center gap-3">
             <input
                 ref="fileInput"
@@ -91,7 +151,7 @@ function pick() {
                 :disabled="uploading"
                 @click="pick"
             >
-                {{ uploading ? 'Uploading…' : modelValue.length ? '+ Add more photos' : '+ Add photos' }}
+                {{ uploading ? 'Uploading…' : modelValue.length ? '+ Add more photos' : 'Browse files' }}
             </button>
             <span v-if="modelValue.length" class="text-xs text-gray-500">
                 {{ modelValue.length }} photo{{ modelValue.length === 1 ? '' : 's' }}

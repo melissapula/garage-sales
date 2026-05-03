@@ -203,11 +203,6 @@ async function submit() {
                 </p>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Photos (optional)</label>
-                <PhotoUploader v-model="photos" class="mt-1" />
-            </div>
-
             <div class="grid gap-4 sm:grid-cols-2">
                 <div>
                     <label class="block text-sm font-medium text-gray-700" for="start-date">
@@ -258,6 +253,11 @@ async function submit() {
                         class="input mt-1"
                     />
                 </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Photos (optional)</label>
+                <PhotoUploader v-model="photos" class="mt-1" />
             </div>
 
             <label class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100">
