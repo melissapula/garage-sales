@@ -12,6 +12,7 @@ const id = route.params.id as string
 
 const config = useRuntimeConfig()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 // ============================================================================
 // Data
@@ -52,7 +53,13 @@ async function addToRoute(saleId: string) {
 }
 
 async function removeStop(saleId: string) {
-    if (!confirm('Remove this stop from the route?')) return
+    const ok = await confirm({
+        title: 'Remove this stop?',
+        description: "It'll come out of the route order. You can re-add it from your saved sales.",
+        confirmText: 'Remove',
+        tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase
         .from('route_stops')
         .delete()
@@ -339,12 +346,19 @@ const mapsLinks = computed(() => {
 })
 
 async function deleteRoute() {
-    if (!confirm('Delete this route?')) return
+    const ok = await confirm({
+        title: 'Delete this route?',
+        description: 'This cannot be undone.',
+        confirmText: 'Delete',
+        tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('routes').delete().eq('id', id)
     if (error) {
         toast.error(error.message)
         return
     }
+    toast.success('Route deleted.')
     router.push('/itineraries')
 }
 

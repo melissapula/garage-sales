@@ -5,6 +5,7 @@ const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const { deletePhotos } = useSalePhotos()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
     'my-sales',
@@ -22,13 +23,20 @@ const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
 )
 
 async function deleteSale(sale: GarageSale) {
-    if (!confirm(`Delete "${sale.title}"? This cannot be undone.`)) return
+    const ok = await confirm({
+        title: `Delete "${sale.title}"?`,
+        description: 'This cannot be undone.',
+        confirmText: 'Delete',
+        tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('garage_sales').delete().eq('id', sale.id)
     if (error) {
         toast.error(error.message)
         return
     }
     if (sale.photos?.length) deletePhotos(sale.photos).catch(() => {})
+    toast.success('Sale deleted.')
     refresh()
 }
 

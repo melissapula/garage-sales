@@ -263,6 +263,7 @@ async function signOut() {
         </main>
 
         <ToastContainer />
+        <ConfirmModal />
 
         <footer class="border-t border-orange-100 bg-white">
             <div

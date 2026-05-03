@@ -3,6 +3,7 @@ const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const { unsave, refresh: refreshSavedIds } = useSavedSales()
 
@@ -52,18 +53,32 @@ async function createRoute() {
 }
 
 async function removeSaved(saleId: string) {
-    if (!confirm('Remove this sale from your saved list?')) return
+    const ok = await confirm({
+        title: 'Remove from saved sales?',
+        description: "You can re-add it from the map any time.",
+        confirmText: 'Remove',
+        tone: 'danger',
+    })
+    if (!ok) return
     await unsave(saleId)
     refreshSaved()
+    toast.success('Removed from saved sales.')
 }
 
 async function deleteRoute(id: string) {
-    if (!confirm('Delete this route?')) return
+    const ok = await confirm({
+        title: 'Delete this route?',
+        description: 'This cannot be undone.',
+        confirmText: 'Delete',
+        tone: 'danger',
+    })
+    if (!ok) return
     const { error } = await supabase.from('routes').delete().eq('id', id)
     if (error) {
         toast.error(error.message)
         return
     }
+    toast.success('Route deleted.')
     refreshRoutes()
 }
 

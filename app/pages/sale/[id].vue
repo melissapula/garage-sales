@@ -24,6 +24,7 @@ const status = computed(() => (sale.value ? saleStatus(sale.value) : null))
 const { isSaved, save, unsave, refresh: refreshSaved } = useSavedSales()
 const { deletePhotos } = useSalePhotos()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const config = useRuntimeConfig()
 const shareUrl = computed(() => `${config.public.siteUrl}/sale/${id}`)
@@ -131,7 +132,13 @@ async function toggleSaved() {
 
 async function deleteSale() {
     if (!sale.value) return
-    if (!confirm('Delete this garage sale? This cannot be undone.')) return
+    const ok = await confirm({
+        title: 'Delete this sale?',
+        description: 'This cannot be undone.',
+        confirmText: 'Delete',
+        tone: 'danger',
+    })
+    if (!ok) return
     const photoUrls = sale.value.photos ?? []
     const { error: err } = await supabase.from('garage_sales').delete().eq('id', sale.value.id)
     if (err) {
@@ -140,6 +147,7 @@ async function deleteSale() {
     }
     // Best-effort cleanup of photos in storage.
     if (photoUrls.length) deletePhotos(photoUrls).catch(() => {})
+    toast.success('Sale deleted.')
     router.push('/browse')
 }
 </script>

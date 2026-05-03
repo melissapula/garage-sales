@@ -10,6 +10,7 @@ const id = route.params.id as string
 
 const unread = useUnreadCount()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const { data, refresh } = await useAsyncData(
     `thread-${id}`,
@@ -48,7 +49,13 @@ function scrollToBottom() {
 
 async function deleteThread() {
     if (!data.value) return
-    if (!confirm('Delete this conversation? This cannot be undone.')) return
+    const ok = await confirm({
+        title: 'Delete this conversation?',
+        description: 'This cannot be undone.',
+        confirmText: 'Delete',
+        tone: 'danger',
+    })
+    if (!ok) return
     const { error: err } = await supabase
         .from('message_threads')
         .delete()
@@ -57,6 +64,7 @@ async function deleteThread() {
         toast.error(err.message)
         return
     }
+    toast.success('Conversation deleted.')
     navigateTo('/inbox')
 }
 
