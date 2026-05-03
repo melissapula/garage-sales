@@ -84,6 +84,8 @@ export default defineNuxtConfig({
                 '/forgot-password',
                 '/reset-password',
                 '/confirm',
+                '/privacy',
+                '/terms',
             ],
             cookieRedirect: false,
         },

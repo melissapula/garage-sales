@@ -266,7 +266,17 @@ async function signOut() {
             <div
                 class="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 py-6 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between"
             >
-                <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
+                <div>
+                    <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
+                    <nav class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <NuxtLink to="/privacy" class="hover:text-sky-700 hover:underline">
+                            Privacy
+                        </NuxtLink>
+                        <NuxtLink to="/terms" class="hover:text-sky-700 hover:underline">
+                            Terms
+                        </NuxtLink>
+                    </nav>
+                </div>
                 <a
                     href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
                     class="inline-flex min-h-[40px] items-center gap-2 rounded-lg border border-sky-500 bg-white px-4 py-2 font-semibold text-sky-700 transition hover:bg-sky-50"
