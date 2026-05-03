@@ -49,6 +49,12 @@ const availableSaved = computed(() => {
         .filter((row) => row.sale.start_date <= day && day <= row.sale.end_date)
 })
 
+// Just the GarageSale objects for the map's available-pin prop, memoized so
+// the prop reference is stable between renders (otherwise the deep watcher
+// in RouteMap tears down + recreates markers on every reactive update,
+// which kills the user's hover state).
+const availableSales = computed(() => availableSaved.value.map((row) => row.sale))
+
 // ============================================================================
 // Manual ordering
 // ============================================================================
@@ -646,7 +652,7 @@ const routeDateLabel = computed(() => {
                             :order="visitOrderForMap"
                             :route-geometry="routeGeometry"
                             :start="startResolved"
-                            :available="availableSaved.map((row) => row.sale)"
+                            :available="availableSales"
                             :selected-available-id="selectedAvailableId"
                             :hovered-available-id="hoveredAvailableId"
                             @select-available="selectAvailable"
