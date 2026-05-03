@@ -107,17 +107,18 @@ export default defineNuxtConfig({
         },
     },
 
-    routeRules: {
-        // Static pages: cache for a day at the edge.
-        '/privacy': { swr: 86400 },
-        '/terms': { swr: 86400 },
-        // Landing: refresh every hour.
-        '/': { swr: 3600 },
-        // Sale detail + shared route: cache 10 min so FB-shared links pop fast.
-        // Edits propagate on the next revalidation.
-        '/sale/**': { swr: 600 },
-        '/share/**': { swr: 600 },
-    },
+    // routeRules with swr only apply in production. In dev, Nitro's payload
+    // cache writes blow up on Windows (ENOENT on .nuxt/cache/nuxt/payload/…).
+    routeRules:
+        process.env.NODE_ENV === 'production'
+            ? {
+                  '/privacy': { swr: 86400 },
+                  '/terms': { swr: 86400 },
+                  '/': { swr: 3600 },
+                  '/sale/**': { swr: 600 },
+                  '/share/**': { swr: 600 },
+              }
+            : {},
 
     vite: {
         optimizeDeps: {
