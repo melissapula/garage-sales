@@ -3,7 +3,17 @@ export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
     devtools: { enabled: true },
 
-    modules: ['@nuxtjs/tailwindcss', '@nuxtjs/supabase', '@vueuse/nuxt'],
+    modules: ['@nuxtjs/tailwindcss', '@nuxtjs/supabase', '@vueuse/nuxt', '@sentry/nuxt/module'],
+
+    // Sentry: silently disabled when NUXT_PUBLIC_SENTRY_DSN isn't set
+    // (e.g. local dev). Source maps don't upload without an auth token.
+    sentry: {
+        sourceMapsUploadOptions: {
+            // Enable when SENTRY_AUTH_TOKEN is set in Vercel; otherwise skip.
+            telemetry: false,
+        },
+        autoInjectServerSentry: 'top-level-import',
+    },
 
     tailwindcss: {
         cssPath: '~/assets/css/tailwind.css',
@@ -47,6 +57,7 @@ export default defineNuxtConfig({
         public: {
             mapboxToken: process.env.MAPBOX_TOKEN,
             siteUrl: process.env.PUBLIC_SITE_URL || 'http://localhost:3000',
+            sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
         },
     },
 
