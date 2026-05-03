@@ -85,21 +85,23 @@ async function onLetsGo(ev: Event) {
             </div>
         </div>
 
-        <div class="mt-3 flex items-center gap-2">
-            <button
-                v-if="!isSaved(sale.id)"
-                class="flex-1 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
-                :disabled="saving"
-                @click="onLetsGo"
-            >
-                {{ saving ? 'Saving…' : "Let's go!" }}
-            </button>
-            <span
-                v-else
-                class="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700"
-            >
-                ✓ On your list
-            </span>
+        <div class="mt-3 flex items-center gap-2" @click.stop>
+            <slot name="action">
+                <button
+                    v-if="!isSaved(sale.id)"
+                    class="flex-1 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50"
+                    :disabled="saving"
+                    @click="onLetsGo"
+                >
+                    {{ saving ? 'Saving…' : "Let's go!" }}
+                </button>
+                <span
+                    v-else
+                    class="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700"
+                >
+                    ✓ On your list
+                </span>
+            </slot>
         </div>
     </article>
 </template>

@@ -14,10 +14,19 @@ const props = defineProps<{
     start: { lng: number; lat: number; label?: string } | null
     /**
      * Saved sales available on this route's date that aren't yet in the route.
-     * Rendered as small status-colored pins (green = today, yellow = upcoming)
-     * so the user can see where their options are while picking which to add.
+     * Rendered as small status-colored pins with hover/click sync.
      */
     available?: GarageSale[]
+    /** Currently click-selected available sale (persistent popover, pans map). */
+    selectedAvailableId?: string | null
+    /** Currently hovered available sale (transient popover). */
+    hoveredAvailableId?: string | null
+}>()
+
+const emit = defineEmits<{
+    (e: 'select-available', saleId: string): void
+    (e: 'hover-available', saleId: string | null): void
+    (e: 'clear-available'): void
 }>()
 
 const config = useRuntimeConfig()
@@ -29,8 +38,21 @@ const BEMIDJI: [number, number] = [-94.8826, 47.4716]
 const ROUTE_SOURCE_ID = 'route'
 const ROUTE_LAYER_ID = 'route-line'
 
+// Available-pin popover state (matches BrowseMap's pattern).
+let activePopup: mapboxgl.Popup | null = null
+let activePopupSaleId: string | null = null
+let activePopupPersistent = false
+let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null
+
 function clearMarkers() {
     while (markers.length) markers.pop()?.remove()
+}
+
+function clearHoverTimer() {
+    if (hoverCloseTimer) {
+        clearTimeout(hoverCloseTimer)
+        hoverCloseTimer = null
+    }
 }
 
 function buildNumberedMarker(n: number): HTMLDivElement {
@@ -59,8 +81,8 @@ function buildAvailableMarker(color: string): HTMLDivElement {
     const el = document.createElement('div')
     el.style.cssText = `
         background: ${color};
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
         border: 2px solid white;
         box-shadow: 0 1px 4px rgba(0,0,0,0.25);
@@ -100,6 +122,79 @@ function escapeHtml(s: string): string {
         .replace(/'/g, '&#39;')
 }
 
+function buildAvailablePopupHtml(sale: GarageSale, withCloseButton: boolean): string {
+    const closeBtn = withCloseButton
+        ? `<button type="button" data-popup-close style="position:absolute;top:4px;right:4px;width:22px;height:22px;border:0;background:transparent;cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;padding:0;" aria-label="Close">×</button>`
+        : ''
+    return `
+        <div style="font-family:'DM Sans',sans-serif;max-width:220px;position:relative;padding-right:${withCloseButton ? '20px' : '0'};">
+            ${closeBtn}
+            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;line-height:1.2;">
+                ${escapeHtml(sale.title)}
+            </div>
+            <div style="margin-top:3px;font-size:12px;color:#374151;">${escapeHtml(sale.address)}</div>
+            <div style="margin-top:5px;font-size:11px;color:#6B7280;font-style:italic;">Saved — not yet in your route</div>
+        </div>
+    `
+}
+
+function showAvailablePopup(saleId: string, persistent: boolean) {
+    if (!map) return
+    const sale = (props.available ?? []).find((s) => s.id === saleId)
+    if (!sale) return
+
+    clearHoverTimer()
+
+    if (activePopupSaleId === saleId && activePopupPersistent === persistent) return
+    if (activePopup) {
+        activePopup.remove()
+        activePopup = null
+    }
+
+    activePopup = new mapboxgl.Popup({
+        offset: 14,
+        closeButton: false,
+        closeOnClick: false,
+        focusAfterOpen: false,
+    })
+        .setLngLat([sale.lng, sale.lat])
+        .setHTML(buildAvailablePopupHtml(sale, persistent))
+        .addTo(map)
+    activePopupSaleId = saleId
+    activePopupPersistent = persistent
+
+    const popupEl = activePopup.getElement()
+    if (!persistent) {
+        popupEl.addEventListener('mouseenter', clearHoverTimer)
+        popupEl.addEventListener('mouseleave', scheduleHoverClose)
+    } else {
+        // Pan/zoom in to make the pin visible.
+        map.flyTo({
+            center: [sale.lng, sale.lat],
+            zoom: Math.max(map.getZoom(), 13),
+            duration: 600,
+            essential: true,
+        })
+    }
+}
+
+function closeActivePopup() {
+    activePopup?.remove()
+    activePopup = null
+    activePopupSaleId = null
+    activePopupPersistent = false
+}
+
+function scheduleHoverClose() {
+    clearHoverTimer()
+    hoverCloseTimer = setTimeout(() => {
+        if (!activePopupPersistent) {
+            closeActivePopup()
+            emit('hover-available', null)
+        }
+    }, 250)
+}
+
 function render() {
     if (!map) return
     clearMarkers()
@@ -130,24 +225,30 @@ function render() {
         markers.push(startMarker)
     }
 
-    // Available (saved-but-not-added) sales as small status-colored pins.
+    // Available (saved-but-not-added) sales as small status-colored pins
+    // with hover + click sync back to the parent.
     for (const sale of props.available ?? []) {
         const color = pinColor(saleStatus(sale))
         const marker = new mapboxgl.Marker({ element: buildAvailableMarker(color) })
             .setLngLat([sale.lng, sale.lat])
-            .setPopup(
-                new mapboxgl.Popup({ offset: 14 }).setHTML(
-                    `<div style="font-family:'DM Sans',sans-serif;max-width:220px;">
-                        <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;">${escapeHtml(sale.title)}</div>
-                        <div style="margin-top:3px;font-size:12px;color:#374151;">${escapeHtml(sale.address)}</div>
-                        <div style="margin-top:4px;font-size:11px;color:#6B7280;font-style:italic;">Saved — not yet in your route</div>
-                    </div>`,
-                ),
-            )
             .addTo(map!)
+        const el = marker.getElement()
+        el.addEventListener('mouseenter', () => {
+            if (activePopupPersistent) return
+            emit('hover-available', sale.id)
+        })
+        el.addEventListener('mouseleave', () => {
+            if (activePopupPersistent) return
+            scheduleHoverClose()
+        })
+        el.addEventListener('click', (e) => {
+            e.stopPropagation()
+            emit('select-available', sale.id)
+        })
         markers.push(marker)
     }
 
+    // Route polyline.
     const existing = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined
     if (props.routeGeometry) {
         const geo: GeoJSON.Feature<GeoJSON.LineString> = {
@@ -175,6 +276,7 @@ function render() {
         existing.setData({ type: 'FeatureCollection', features: [] } as GeoJSON.FeatureCollection)
     }
 
+    // Fit to all known points.
     const allCoords: [number, number][] = props.stops.map((s) => [s.sale.lng, s.sale.lat])
     if (props.start) allCoords.push([props.start.lng, props.start.lat])
     for (const sale of props.available ?? []) {
@@ -189,6 +291,16 @@ function render() {
     }
 }
 
+function syncFromProps() {
+    if (props.selectedAvailableId) {
+        showAvailablePopup(props.selectedAvailableId, true)
+    } else if (props.hoveredAvailableId) {
+        showAvailablePopup(props.hoveredAvailableId, false)
+    } else {
+        closeActivePopup()
+    }
+}
+
 onMounted(() => {
     if (!mapEl.value) return
     mapboxgl.accessToken = config.public.mapboxToken as string
@@ -199,10 +311,37 @@ onMounted(() => {
         zoom: 11,
     })
     map.addControl(new mapboxgl.NavigationControl(), 'top-right')
-    map.on('load', render)
+
+    // Click handler for popup close button + click-outside.
+    mapEl.value.addEventListener('click', (ev) => {
+        const target = ev.target as HTMLElement | null
+        if (!target) return
+        const closeBtn = target.closest('[data-popup-close]')
+        if (closeBtn) {
+            ev.stopPropagation()
+            emit('clear-available')
+            return
+        }
+        const onMarker = target.closest('.mapboxgl-marker')
+        const onPopup = target.closest('.mapboxgl-popup')
+        if (!onMarker && !onPopup && activePopupPersistent) {
+            emit('clear-available')
+        }
+    })
+
+    map.on('click', () => {
+        if (activePopupPersistent) emit('clear-available')
+    })
+
+    map.on('load', () => {
+        render()
+        syncFromProps()
+    })
 })
 
 onBeforeUnmount(() => {
+    clearHoverTimer()
+    closeActivePopup()
     clearMarkers()
     map?.remove()
     map = null
@@ -211,10 +350,18 @@ onBeforeUnmount(() => {
 watch(
     () => [props.stops, props.order, props.routeGeometry, props.start, props.available],
     () => {
-        if (map?.loaded()) render()
+        if (map?.loaded()) {
+            render()
+            syncFromProps()
+        }
     },
     { deep: true },
 )
+watch(() => props.selectedAvailableId, syncFromProps)
+watch(() => props.hoveredAvailableId, () => {
+    if (props.selectedAvailableId) return
+    syncFromProps()
+})
 </script>
 
 <template>

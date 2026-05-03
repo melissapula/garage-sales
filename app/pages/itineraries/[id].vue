@@ -14,6 +14,21 @@ const config = useRuntimeConfig()
 const toast = useToast()
 const { confirm } = useConfirm()
 
+// Two-way sync between the saved-sale cards and their map pins.
+const selectedAvailableId = ref<string | null>(null)
+const hoveredAvailableId = ref<string | null>(null)
+
+function selectAvailable(saleId: string) {
+    selectedAvailableId.value = saleId
+}
+function onHoverAvailable(saleId: string | null) {
+    hoveredAvailableId.value = saleId
+}
+function clearAvailableSelection() {
+    selectedAvailableId.value = null
+    hoveredAvailableId.value = null
+}
+
 // ============================================================================
 // Data
 // ============================================================================
@@ -585,34 +600,35 @@ const routeDateLabel = computed(() => {
                         <h3 class="font-display text-base font-bold text-gray-900">
                             Saved sales available on {{ routeDateLabel }}
                         </h3>
-                        <ul v-if="availableSaved.length" class="mt-2 space-y-2">
-                            <li
+                        <p
+                            v-if="availableSaved.length"
+                            class="mt-1 text-xs text-gray-500"
+                        >
+                            Tap a card to highlight it on the map.
+                        </p>
+                        <div v-if="availableSaved.length" class="mt-3 space-y-2">
+                            <BrowseSaleCard
                                 v-for="row in availableSaved"
                                 :key="row.garage_sale_id"
-                                class="flex items-start gap-3 rounded-lg bg-cream p-3"
+                                :sale="row.sale"
+                                :selected="
+                                    selectedAvailableId === row.garage_sale_id ||
+                                    hoveredAvailableId === row.garage_sale_id
+                                "
+                                @select="selectAvailable"
+                                @hover="onHoverAvailable"
                             >
-                                <div class="flex-1 min-w-0">
-                                    <div class="truncate text-sm font-medium text-gray-900">
-                                        {{ row.sale.title }}
-                                    </div>
-                                    <div class="mt-0.5 truncate text-xs text-gray-600">
-                                        {{ row.sale.address }}
-                                    </div>
-                                    <div
-                                        v-if="row.sale.start_time || row.sale.end_time"
-                                        class="mt-0.5 text-xs text-gray-500"
+                                <template #action>
+                                    <button
+                                        type="button"
+                                        class="flex-1 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600"
+                                        @click="addToRoute(row.garage_sale_id)"
                                     >
-                                        {{ formatTimeRange(row.sale.start_time, row.sale.end_time) }}
-                                    </div>
-                                </div>
-                                <button
-                                    class="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600"
-                                    @click="addToRoute(row.garage_sale_id)"
-                                >
-                                    + Add
-                                </button>
-                            </li>
-                        </ul>
+                                        + Add to route
+                                    </button>
+                                </template>
+                            </BrowseSaleCard>
+                        </div>
                         <p v-else class="mt-2 text-sm text-gray-500">
                             None of your saved sales are happening that day.
                             <NuxtLink to="/browse" class="text-sky-700 hover:underline">
@@ -631,6 +647,11 @@ const routeDateLabel = computed(() => {
                             :route-geometry="routeGeometry"
                             :start="startResolved"
                             :available="availableSaved.map((row) => row.sale)"
+                            :selected-available-id="selectedAvailableId"
+                            :hovered-available-id="hoveredAvailableId"
+                            @select-available="selectAvailable"
+                            @hover-available="onHoverAvailable"
+                            @clear-available="clearAvailableSelection"
                         />
                         <template #fallback>
                             <div
