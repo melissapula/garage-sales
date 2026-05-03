@@ -107,6 +107,18 @@ export default defineNuxtConfig({
         },
     },
 
+    routeRules: {
+        // Static pages: cache for a day at the edge.
+        '/privacy': { swr: 86400 },
+        '/terms': { swr: 86400 },
+        // Landing: refresh every hour.
+        '/': { swr: 3600 },
+        // Sale detail + shared route: cache 10 min so FB-shared links pop fast.
+        // Edits propagate on the next revalidation.
+        '/sale/**': { swr: 600 },
+        '/share/**': { swr: 600 },
+    },
+
     vite: {
         optimizeDeps: {
             include: ['mapbox-gl'],
