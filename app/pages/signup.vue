@@ -1,15 +1,22 @@
 <script setup lang="ts">
+import VueHcaptcha from '@hcaptcha/vue3-hcaptcha'
+
 const supabase = useSupabaseClient()
 const config = useRuntimeConfig()
+
+const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
+const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
 
 const email = ref('')
 const password = ref('')
 const passwordConfirm = ref('')
 const showPassword = ref(false)
+const captchaToken = ref<string | null>(null)
 const error = ref<string | null>(null)
 const alreadyExists = ref(false)
 const loading = ref(false)
 const sent = ref(false)
+const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
 
 const passwordType = computed(() => (showPassword.value ? 'text' : 'password'))
 const passwordTooShort = computed(() => password.value.length > 0 && password.value.length < 8)
@@ -20,8 +27,19 @@ const canSubmit = computed(
     () =>
         email.value.length > 0 &&
         password.value.length >= 8 &&
-        password.value === passwordConfirm.value,
+        password.value === passwordConfirm.value &&
+        (!captchaEnabled.value || captchaToken.value !== null),
 )
+
+function onCaptchaVerify(token: string) {
+    captchaToken.value = token
+}
+function onCaptchaExpired() {
+    captchaToken.value = null
+}
+function onCaptchaError() {
+    captchaToken.value = null
+}
 
 async function submit() {
     error.value = null
@@ -33,9 +51,15 @@ async function submit() {
         password: password.value,
         options: {
             emailRedirectTo: `${config.public.siteUrl}/confirm`,
+            ...(captchaToken.value ? { captchaToken: captchaToken.value } : {}),
         },
     })
     loading.value = false
+    // Reset captcha — tokens are single-use.
+    if (captchaEnabled.value) {
+        captchaToken.value = null
+        hcaptchaRef.value?.reset()
+    }
     if (err) {
         error.value = err.message
         return
@@ -184,6 +208,16 @@ async function submit() {
                 >
                     Passwords don't match.
                 </p>
+            </div>
+
+            <div v-if="captchaEnabled" class="flex justify-center">
+                <VueHcaptcha
+                    ref="hcaptchaRef"
+                    :sitekey="hcaptchaSiteKey"
+                    @verify="onCaptchaVerify"
+                    @expired="onCaptchaExpired"
+                    @error="onCaptchaError"
+                />
             </div>
 
             <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

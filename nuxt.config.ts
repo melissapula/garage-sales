@@ -58,6 +58,7 @@ export default defineNuxtConfig({
             mapboxToken: process.env.MAPBOX_TOKEN,
             siteUrl: process.env.PUBLIC_SITE_URL || 'http://localhost:3000',
             sentryDsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
+            hcaptchaSiteKey: process.env.NUXT_PUBLIC_HCAPTCHA_SITE_KEY || '',
         },
     },
 
