@@ -13,7 +13,8 @@ const emit = defineEmits<{
 }>()
 
 const user = useSupabaseUser()
-const { isSaved, save } = useSavedSales()
+const { isSaved, save, unsave } = useSavedSales()
+const toast = useToast()
 
 const status = computed(() => saleStatus(props.sale))
 const dateRange = computed(() => formatDateRange(props.sale.start_date, props.sale.end_date))
@@ -33,6 +34,15 @@ async function onLetsGo(ev: Event) {
     saving.value = true
     await save(props.sale.id)
     saving.value = false
+}
+
+const removing = ref(false)
+async function onRemove(ev: Event) {
+    ev.stopPropagation()
+    removing.value = true
+    await unsave(props.sale.id)
+    removing.value = false
+    toast.success('Removed from saved sales.')
 }
 </script>
 
@@ -95,12 +105,22 @@ async function onLetsGo(ev: Event) {
                 >
                     {{ saving ? 'Saving…' : "Let's go!" }}
                 </button>
-                <span
-                    v-else
-                    class="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700"
-                >
-                    ✓ On your list
-                </span>
+                <template v-else>
+                    <span
+                        class="flex-1 rounded-lg bg-green-50 px-3 py-2 text-center text-sm font-semibold text-green-700"
+                    >
+                        ✓ On your list
+                    </span>
+                    <button
+                        type="button"
+                        class="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                        :disabled="removing"
+                        :aria-label="`Remove ${sale.title} from saved sales`"
+                        @click="onRemove"
+                    >
+                        {{ removing ? 'Removing…' : 'Remove' }}
+                    </button>
+                </template>
             </slot>
         </div>
     </article>
