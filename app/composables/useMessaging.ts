@@ -58,18 +58,31 @@ export async function findOrCreateThread(
     return data.id
 }
 
-export async function sendMessage(threadId: string, body: string): Promise<void> {
+export async function sendMessage(threadId: string, body: string): Promise<Message> {
     const supabase = useSupabaseClient()
     const user = useSupabaseUser()
     if (!user.value) throw new Error('Sign in first.')
     const trimmed = body.trim()
     if (!trimmed) throw new Error('Type a message first.')
-    const { error } = await supabase.from('messages').insert({
-        thread_id: threadId,
-        sender_id: user.value.id,
-        body: trimmed,
-    })
+    const { data, error } = await supabase
+        .from('messages')
+        .insert({
+            thread_id: threadId,
+            sender_id: user.value.id,
+            body: trimmed,
+        })
+        .select()
+        .single()
     if (error) throw error
+
+    // Fire-and-forget: kick off the email notification without blocking the UX.
+    // Failures here are silent — the message is already saved.
+    $fetch('/api/notifications/message', {
+        method: 'POST',
+        body: { messageId: data.id },
+    }).catch(() => {})
+
+    return data as Message
 }
 
 export async function markThreadRead(threadId: string): Promise<void> {

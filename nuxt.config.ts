@@ -41,6 +41,9 @@ export default defineNuxtConfig({
     },
 
     runtimeConfig: {
+        // Server-only secrets (never exposed to the browser).
+        resendApiKey: process.env.RESEND_API_KEY,
+        emailFrom: process.env.EMAIL_FROM || 'Garage Sale Tracker <noreply@frulahomes.com>',
         public: {
             mapboxToken: process.env.MAPBOX_TOKEN,
             siteUrl: process.env.PUBLIC_SITE_URL || 'http://localhost:3000',
