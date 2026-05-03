@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const MAX_PHOTOS = 10
+
 const props = defineProps<{
     modelValue: string[]
 }>()
@@ -16,13 +18,29 @@ const error = ref<string | null>(null)
 const dragActive = ref(false)
 let dragDepth = 0
 
+const remainingSlots = computed(() => Math.max(0, MAX_PHOTOS - props.modelValue.length))
+const limitReached = computed(() => remainingSlots.value === 0)
+
 async function processFiles(files: File[]) {
     if (files.length === 0) return
     error.value = null
+
+    let toUpload = files
+    if (toUpload.length > remainingSlots.value) {
+        const dropped = toUpload.length - remainingSlots.value
+        toUpload = toUpload.slice(0, remainingSlots.value)
+        error.value = `Only ${remainingSlots.value} more photo${remainingSlots.value === 1 ? '' : 's'} fits — ${dropped} skipped.`
+    }
+    if (toUpload.length === 0) {
+        if (limitReached.value) error.value = `You've hit the ${MAX_PHOTOS}-photo limit.`
+        if (fileInput.value) fileInput.value.value = ''
+        return
+    }
+
     uploading.value = true
     try {
         const newUrls: string[] = []
-        for (const file of files) {
+        for (const file of toUpload) {
             if (!file.type.startsWith('image/')) {
                 error.value = `${file.name} isn't an image — skipped.`
                 continue
@@ -133,7 +151,7 @@ function pick() {
                 />
             </svg>
             <p class="font-medium text-gray-700">Drag photos here</p>
-            <p class="mt-0.5 text-xs">or click below to browse</p>
+            <p class="mt-0.5 text-xs">or click below to browse — up to {{ MAX_PHOTOS }} images</p>
         </div>
 
         <div class="mt-3 flex flex-wrap items-center gap-3">
@@ -147,14 +165,22 @@ function pick() {
             />
             <button
                 type="button"
-                class="btn-secondary !min-h-[40px] !px-4 !py-2 text-sm"
-                :disabled="uploading"
+                class="btn-secondary !min-h-[40px] !px-4 !py-2 text-sm disabled:cursor-not-allowed"
+                :disabled="uploading || limitReached"
                 @click="pick"
             >
-                {{ uploading ? 'Uploading…' : modelValue.length ? '+ Add more photos' : 'Browse files' }}
+                {{
+                    uploading
+                        ? 'Uploading…'
+                        : limitReached
+                          ? `${MAX_PHOTOS}-photo limit reached`
+                          : modelValue.length
+                            ? '+ Add more photos'
+                            : 'Browse files'
+                }}
             </button>
-            <span v-if="modelValue.length" class="text-xs text-gray-500">
-                {{ modelValue.length }} photo{{ modelValue.length === 1 ? '' : 's' }}
+            <span class="text-xs text-gray-500">
+                {{ modelValue.length }} of {{ MAX_PHOTOS }} photo{{ MAX_PHOTOS === 1 ? '' : 's' }}
             </span>
         </div>
 
