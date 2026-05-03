@@ -718,7 +718,7 @@ const routeDateLabel = computed(() => {
                                     Finding your location…
                                 </span>
                                 <span v-else-if="startResolved && startResolved.label === 'You'">
-                                    📍 Got it
+                                    📍 Refind my location
                                 </span>
                                 <span v-else>📍 Use my location</span>
                             </button>
