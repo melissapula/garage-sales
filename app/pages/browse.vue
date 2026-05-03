@@ -66,6 +66,14 @@ async function onLetsGo(saleId: string) {
 type MobileTab = 'list' | 'map' | 'filters'
 const mobileTab = ref<MobileTab>('list')
 
+function selectMobileTab(tab: MobileTab) {
+    mobileTab.value = tab
+    // Tapping a tab is a "go back to browsing" gesture: clear any selected
+    // sale so the list tab shows the full filtered list and the map tab
+    // shows all the filtered pins without the stacked detail card.
+    clearSelection()
+}
+
 const activeCount = computed(
     () => filteredSales.value.filter((s) => saleStatus(s) === 'active').length,
 )
@@ -145,7 +153,7 @@ const upcomingCount = computed(
                         ? 'bg-brand-500 text-white'
                         : 'text-gray-600 hover:bg-orange-50'
                 "
-                @click="mobileTab = tab"
+                @click="selectMobileTab(tab)"
             >
                 {{ tab }}
             </button>
@@ -161,8 +169,9 @@ const upcomingCount = computed(
             </aside>
 
             <!-- MIDDLE: list or detail -->
-            <!-- On mobile, also visible whenever a sale is selected so the
-                 detail card stacks above the map. -->
+            <!-- On mobile, when a sale is selected we stack detail above the
+                 map by default. Tapping any tab clears the selection, so the
+                 tab's view is shown without the stacked detail card. -->
             <div :class="{ 'hidden lg:block': mobileTab !== 'list' && !selectedSale }">
                 <BrowseSaleDetail
                     v-if="selectedSale"
@@ -191,11 +200,12 @@ const upcomingCount = computed(
             </div>
 
             <!-- RIGHT: Map -->
-            <!-- On mobile, also visible whenever a sale is selected so the
-                 map stacks below the detail card. -->
+            <!-- Mobile: fill the viewport so there's no cream gap between
+                 the map and the footer. Desktop: 60vh, sized to live
+                 alongside the list column in the 3-col row. -->
             <div
                 :class="{ 'hidden lg:block': mobileTab !== 'map' && !selectedSale }"
-                class="relative min-h-[60vh]"
+                class="relative min-h-screen lg:min-h-[60vh]"
             >
                 <ClientOnly>
                     <BrowseMap

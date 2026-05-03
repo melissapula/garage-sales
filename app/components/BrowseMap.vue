@@ -22,6 +22,7 @@ const { isSaved } = useSavedSales()
 
 const mapEl = ref<HTMLDivElement | null>(null)
 let map: mapboxgl.Map | null = null
+let resizeObserver: ResizeObserver | null = null
 const markers = new Map<string, mapboxgl.Marker>()
 
 const BEMIDJI: [number, number] = [-94.8826, 47.4716]
@@ -249,6 +250,16 @@ onMounted(async () => {
         syncFromProps()
     })
 
+    // Mapbox's built-in trackResize only listens for *window* resizes, so
+    // when the container grows due to internal layout changes (e.g., the
+    // mobile stacked detail+map view, or tabs swapping panes) the canvas
+    // is left at its original size and tiles stop rendering past that
+    // boundary. Watch the container itself and resize on every change.
+    resizeObserver = new ResizeObserver(() => {
+        map?.resize()
+    })
+    resizeObserver.observe(mapEl.value)
+
     // Mapbox's own canvas click — fires reliably on touch devices when the
     // synthesized DOM click gets eaten by Mapbox's gesture system. It does
     // NOT fire when a marker is tapped because marker clicks stopPropagation.
@@ -263,6 +274,8 @@ onBeforeUnmount(() => {
     clearHoverTimer()
     closePopup()
     clearMarkers()
+    resizeObserver?.disconnect()
+    resizeObserver = null
     map?.remove()
     map = null
 })
