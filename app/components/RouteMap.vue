@@ -12,6 +12,12 @@ const props = defineProps<{
     routeGeometry: GeoJSON.LineString | null
     /** Driver's start location. */
     start: { lng: number; lat: number; label?: string } | null
+    /**
+     * Saved sales available on this route's date that aren't yet in the route.
+     * Rendered as small status-colored pins (green = today, yellow = upcoming)
+     * so the user can see where their options are while picking which to add.
+     */
+    available?: GarageSale[]
 }>()
 
 const config = useRuntimeConfig()
@@ -46,6 +52,20 @@ function buildNumberedMarker(n: number): HTMLDivElement {
         cursor: pointer;
     `
     el.textContent = String(n)
+    return el
+}
+
+function buildAvailableMarker(color: string): HTMLDivElement {
+    const el = document.createElement('div')
+    el.style.cssText = `
+        background: ${color};
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+        cursor: pointer;
+    `
     return el
 }
 
@@ -110,6 +130,24 @@ function render() {
         markers.push(startMarker)
     }
 
+    // Available (saved-but-not-added) sales as small status-colored pins.
+    for (const sale of props.available ?? []) {
+        const color = pinColor(saleStatus(sale))
+        const marker = new mapboxgl.Marker({ element: buildAvailableMarker(color) })
+            .setLngLat([sale.lng, sale.lat])
+            .setPopup(
+                new mapboxgl.Popup({ offset: 14 }).setHTML(
+                    `<div style="font-family:'DM Sans',sans-serif;max-width:220px;">
+                        <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:14px;">${escapeHtml(sale.title)}</div>
+                        <div style="margin-top:3px;font-size:12px;color:#374151;">${escapeHtml(sale.address)}</div>
+                        <div style="margin-top:4px;font-size:11px;color:#6B7280;font-style:italic;">Saved — not yet in your route</div>
+                    </div>`,
+                ),
+            )
+            .addTo(map!)
+        markers.push(marker)
+    }
+
     const existing = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined
     if (props.routeGeometry) {
         const geo: GeoJSON.Feature<GeoJSON.LineString> = {
@@ -139,6 +177,9 @@ function render() {
 
     const allCoords: [number, number][] = props.stops.map((s) => [s.sale.lng, s.sale.lat])
     if (props.start) allCoords.push([props.start.lng, props.start.lat])
+    for (const sale of props.available ?? []) {
+        allCoords.push([sale.lng, sale.lat])
+    }
     if (allCoords.length > 0) {
         const bounds = allCoords.reduce(
             (b, c) => b.extend(c),
@@ -168,7 +209,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-    () => [props.stops, props.order, props.routeGeometry, props.start],
+    () => [props.stops, props.order, props.routeGeometry, props.start, props.available],
     () => {
         if (map?.loaded()) render()
     },

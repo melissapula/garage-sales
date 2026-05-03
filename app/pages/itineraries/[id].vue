@@ -630,6 +630,7 @@ const routeDateLabel = computed(() => {
                             :order="visitOrderForMap"
                             :route-geometry="routeGeometry"
                             :start="startResolved"
+                            :available="availableSaved.map((row) => row.sale)"
                         />
                         <template #fallback>
                             <div
