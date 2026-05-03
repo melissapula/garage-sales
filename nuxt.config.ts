@@ -94,6 +94,7 @@ export default defineNuxtConfig({
                 '/',
                 '/browse',
                 '/sale/**',
+                '/share/**',
                 '/login',
                 '/signup',
                 '/forgot-password',

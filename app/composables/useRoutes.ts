@@ -5,6 +5,7 @@ export interface Route {
     user_id: string
     name: string
     route_date: string
+    is_public: boolean
     created_at: string
 }
 

@@ -10,6 +10,7 @@ const router = useRouter()
 
 const id = route.params.id as string
 
+const config = useRuntimeConfig()
 const toast = useToast()
 
 // ============================================================================
@@ -347,6 +348,40 @@ async function deleteRoute() {
     router.push('/itineraries')
 }
 
+// =============================================================================
+// Public sharing
+// =============================================================================
+const shareUrl = computed(() => `${config.public.siteUrl}/share/${id}`)
+const shareCopied = ref(false)
+const togglingPublic = ref(false)
+
+async function togglePublic() {
+    if (!data.value || togglingPublic.value) return
+    togglingPublic.value = true
+    const next = !data.value.route.is_public
+    const { error } = await supabase
+        .from('routes')
+        .update({ is_public: next })
+        .eq('id', id)
+    togglingPublic.value = false
+    if (error) {
+        toast.error(error.message)
+        return
+    }
+    data.value.route.is_public = next
+    if (next) toast.success('Route is now public — share the link!')
+}
+
+async function copyShareLink() {
+    try {
+        await navigator.clipboard.writeText(shareUrl.value)
+        shareCopied.value = true
+        setTimeout(() => (shareCopied.value = false), 2000)
+    } catch {
+        window.prompt('Copy this link:', shareUrl.value)
+    }
+}
+
 function fmtTime(d: Date): string {
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
@@ -388,6 +423,62 @@ const routeDateLabel = computed(() => {
                     Delete route
                 </button>
             </div>
+
+            <!-- Share -->
+            <section class="mt-4 rounded-xl bg-white p-4 ring-1 ring-orange-100">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="flex-1">
+                        <h2 class="font-display text-base font-bold text-gray-900">
+                            Share this route
+                        </h2>
+                        <p class="mt-1 text-sm text-gray-600">
+                            <template v-if="data.route.is_public">
+                                Public — anyone with the link can view this route (read-only).
+                            </template>
+                            <template v-else>
+                                Make it public to share the link with friends or family.
+                            </template>
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-lg border px-3 py-1.5 text-sm font-semibold transition"
+                        :class="
+                            data.route.is_public
+                                ? 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                : 'border-brand-500 bg-brand-500 text-white hover:bg-brand-600'
+                        "
+                        :disabled="togglingPublic"
+                        @click="togglePublic"
+                    >
+                        {{
+                            togglingPublic
+                                ? 'Saving…'
+                                : data.route.is_public
+                                  ? 'Make private'
+                                  : 'Make public'
+                        }}
+                    </button>
+                </div>
+                <div
+                    v-if="data.route.is_public"
+                    class="mt-3 flex flex-col gap-2 sm:flex-row"
+                >
+                    <input
+                        :value="shareUrl"
+                        readonly
+                        class="input flex-1 !min-h-[40px] !text-sm"
+                        @focus="($event.target as HTMLInputElement).select()"
+                    />
+                    <button
+                        type="button"
+                        class="btn-secondary !min-h-[40px] !px-4 !py-2 text-sm sm:w-32"
+                        @click="copyShareLink"
+                    >
+                        {{ shareCopied ? '✓ Copied' : 'Copy link' }}
+                    </button>
+                </div>
+            </section>
 
             <!-- Split: stops + map -->
             <div class="mt-6 grid gap-6 lg:grid-cols-[2fr_3fr]">
