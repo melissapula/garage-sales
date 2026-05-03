@@ -165,7 +165,9 @@ const upcomingCount = computed(
             </aside>
 
             <!-- MIDDLE: list or detail -->
-            <div :class="{ 'hidden lg:block': mobileTab !== 'list' }">
+            <!-- On mobile, also visible whenever a sale is selected so the
+                 detail card stacks above the map. -->
+            <div :class="{ 'hidden lg:block': mobileTab !== 'list' && !selectedSale }">
                 <BrowseSaleDetail
                     v-if="selectedSale"
                     :sale="selectedSale"
@@ -193,8 +195,10 @@ const upcomingCount = computed(
             </div>
 
             <!-- RIGHT: Map -->
+            <!-- On mobile, also visible whenever a sale is selected so the
+                 map stacks below the detail card. -->
             <div
-                :class="{ 'hidden lg:block': mobileTab !== 'map' }"
+                :class="{ 'hidden lg:block': mobileTab !== 'map' && !selectedSale }"
                 class="relative min-h-[60vh]"
             >
                 <ClientOnly>
