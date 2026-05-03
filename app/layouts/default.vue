@@ -270,6 +270,16 @@ async function signOut() {
             >
                 <div>
                     <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                        This app is still evolving. Got a feature request or bug?
+                        <a
+                            href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
+                            class="text-sky-700 hover:underline"
+                        >
+                            Reach out
+                        </a>
+                        — I'd love to hear from you.
+                    </p>
                     <nav class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                         <NuxtLink to="/privacy" class="hover:text-sky-700 hover:underline">
                             Privacy

@@ -31,8 +31,8 @@ async function processCallback() {
             return
         }
         // Recovery (password reset) → land on the reset-password form.
-        // Signup / email change / other → straight into the app.
-        router.push(otpType === 'recovery' ? '/reset-password' : '/browse')
+        // Signup / email change / other → straight into the app with welcome.
+        router.push(otpType === 'recovery' ? '/reset-password' : '/browse?welcome=1')
         return
     }
 
@@ -43,7 +43,7 @@ async function processCallback() {
     if (code) {
         const { error: err } = await supabase.auth.exchangeCodeForSession(code)
         if (!err) {
-            router.push('/browse')
+            router.push('/browse?welcome=1')
             return
         }
         // Most common case: cross-device click. The email confirmation has
@@ -68,7 +68,7 @@ async function processCallback() {
     setTimeout(async () => {
         const { data } = await supabase.auth.getSession()
         if (data.session) {
-            router.push('/browse')
+            router.push('/browse?welcome=1')
         } else {
             error.value =
                 "We couldn't confirm your account. The link may have expired or already been used."
@@ -79,7 +79,7 @@ async function processCallback() {
 onMounted(processCallback)
 
 watchEffect(() => {
-    if (user.value) router.push('/browse')
+    if (user.value) router.push('/browse?welcome=1')
 })
 </script>
 

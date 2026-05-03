@@ -1,6 +1,16 @@
 <script setup lang="ts">
 const { savedSet, save, refresh: refreshSaved } = useSavedSales()
 const user = useSupabaseUser()
+const route = useRoute()
+const router = useRouter()
+
+const showWelcome = ref(route.query.welcome === '1')
+function dismissWelcome() {
+    showWelcome.value = false
+    const next = { ...route.query }
+    delete next.welcome
+    router.replace({ query: next })
+}
 
 const { data: sales, pending, error, refresh } = await useAsyncData('active-sales', () =>
     fetchActiveSales(),
@@ -60,6 +70,51 @@ const upcomingCount = computed(
 
 <template>
     <section class="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
+        <!-- Welcome banner -->
+        <div
+            v-if="showWelcome"
+            class="mb-4 flex items-start gap-3 rounded-xl bg-gradient-to-r from-orange-100 to-amber-100 p-4 ring-1 ring-orange-200"
+        >
+            <span class="text-2xl">👋</span>
+            <div class="flex-1 text-sm text-gray-800">
+                <p class="font-display text-base font-bold text-gray-900">
+                    Welcome to Garage Sale Tracker!
+                </p>
+                <p class="mt-1">
+                    Tap <strong>"Let's go!"</strong> on any sale to save it for later, or
+                    <NuxtLink
+                        to="/post"
+                        class="font-semibold text-brand-600 hover:underline"
+                    >
+                        post your own
+                    </NuxtLink>
+                    .
+                </p>
+                <p class="mt-1.5">
+                    This app is still evolving — if you'd like a feature added or run into a
+                    bug,
+                    <a
+                        href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
+                        class="font-semibold text-sky-700 hover:underline"
+                    >
+                        reach out
+                    </a>
+                    . I'd love to hear from you.
+                </p>
+            </div>
+            <button
+                class="-mr-1 -mt-1 shrink-0 rounded p-1 text-gray-500 hover:bg-black/5 hover:text-gray-800"
+                aria-label="Dismiss welcome message"
+                @click="dismissWelcome"
+            >
+                <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                    />
+                </svg>
+            </button>
+        </div>
+
         <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
             <h1 class="font-display text-2xl font-bold text-gray-900 sm:text-3xl">
                 Browse garage sales
