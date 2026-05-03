@@ -31,6 +31,11 @@ function onHover(saleId: string | null) {
 
 function clearSelection() {
     selectedId.value = null
+    // On mobile, browsers fire a synthesized mouseenter on tap, leaving
+    // hoveredId set after a pin tap. Without clearing it here, the popover
+    // would re-render as a transient hover popup (no X) when selection
+    // clears, leaving the user with a popover they can't dismiss.
+    hoveredId.value = null
 }
 
 async function onLetsGo(saleId: string) {
