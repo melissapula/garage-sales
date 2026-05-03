@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+    type BrowseFiltersValue,
+    applyFilters,
+    emptyFilters,
+} from '~/utils/filters'
+
 const { savedSet, save, refresh: refreshSaved } = useSavedSales()
 const user = useSupabaseUser()
 const route = useRoute()
