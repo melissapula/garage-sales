@@ -262,6 +262,8 @@ async function signOut() {
             <slot />
         </main>
 
+        <ToastContainer />
+
         <footer class="border-t border-orange-100 bg-white">
             <div
                 class="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 py-6 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between"

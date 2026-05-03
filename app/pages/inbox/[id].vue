@@ -9,6 +9,7 @@ const user = useSupabaseUser()
 const id = route.params.id as string
 
 const unread = useUnreadCount()
+const toast = useToast()
 
 const { data, refresh } = await useAsyncData(
     `thread-${id}`,
@@ -53,7 +54,7 @@ async function deleteThread() {
         .delete()
         .eq('id', data.value.thread.id)
     if (err) {
-        alert(err.message)
+        toast.error(err.message)
         return
     }
     navigateTo('/inbox')

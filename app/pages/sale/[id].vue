@@ -23,6 +23,7 @@ const status = computed(() => (sale.value ? saleStatus(sale.value) : null))
 
 const { isSaved, save, unsave, refresh: refreshSaved } = useSavedSales()
 const { deletePhotos } = useSalePhotos()
+const toast = useToast()
 
 const config = useRuntimeConfig()
 const shareUrl = computed(() => `${config.public.siteUrl}/sale/${id}`)
@@ -104,7 +105,7 @@ async function messageOwner() {
         const threadId = await findOrCreateThread(sale.value.user_id, sale.value.id)
         navigateTo(`/inbox/${threadId}`)
     } catch (e) {
-        alert(e instanceof Error ? e.message : 'Could not start a thread')
+        toast.error(e instanceof Error ? e.message : 'Could not start a thread')
     } finally {
         messaging.value = false
     }
@@ -134,7 +135,7 @@ async function deleteSale() {
     const photoUrls = sale.value.photos ?? []
     const { error: err } = await supabase.from('garage_sales').delete().eq('id', sale.value.id)
     if (err) {
-        alert(err.message)
+        toast.error(err.message)
         return
     }
     // Best-effort cleanup of photos in storage.

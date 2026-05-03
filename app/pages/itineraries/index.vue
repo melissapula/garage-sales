@@ -2,6 +2,7 @@
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()
+const toast = useToast()
 
 const { unsave, refresh: refreshSavedIds } = useSavedSales()
 
@@ -51,6 +52,7 @@ async function createRoute() {
 }
 
 async function removeSaved(saleId: string) {
+    if (!confirm('Remove this sale from your saved list?')) return
     await unsave(saleId)
     refreshSaved()
 }
@@ -59,7 +61,7 @@ async function deleteRoute(id: string) {
     if (!confirm('Delete this route?')) return
     const { error } = await supabase.from('routes').delete().eq('id', id)
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
     }
     refreshRoutes()

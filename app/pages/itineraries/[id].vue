@@ -10,6 +10,8 @@ const router = useRouter()
 
 const id = route.params.id as string
 
+const toast = useToast()
+
 // ============================================================================
 // Data
 // ============================================================================
@@ -41,7 +43,7 @@ async function addToRoute(saleId: string) {
         .from('route_stops')
         .insert({ route_id: id, garage_sale_id: saleId, position: nextPos })
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
     }
     invalidateOptimization()
@@ -49,13 +51,14 @@ async function addToRoute(saleId: string) {
 }
 
 async function removeStop(saleId: string) {
+    if (!confirm('Remove this stop from the route?')) return
     const { error } = await supabase
         .from('route_stops')
         .delete()
         .eq('route_id', id)
         .eq('garage_sale_id', saleId)
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
     }
     invalidateOptimization()
@@ -79,7 +82,7 @@ async function persistDraggedOrder() {
     const { error } = await supabase.from('route_stops').upsert(updates)
     persisting.value = false
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         await refresh()
         return
     }
@@ -338,7 +341,7 @@ async function deleteRoute() {
     if (!confirm('Delete this route?')) return
     const { error } = await supabase.from('routes').delete().eq('id', id)
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
     }
     router.push('/itineraries')

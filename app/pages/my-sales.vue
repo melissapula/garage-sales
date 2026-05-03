@@ -4,6 +4,7 @@ import type { GarageSale } from '~/composables/useGarageSales'
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const { deletePhotos } = useSalePhotos()
+const toast = useToast()
 
 const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
     'my-sales',
@@ -24,7 +25,7 @@ async function deleteSale(sale: GarageSale) {
     if (!confirm(`Delete "${sale.title}"? This cannot be undone.`)) return
     const { error } = await supabase.from('garage_sales').delete().eq('id', sale.id)
     if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
     }
     if (sale.photos?.length) deletePhotos(sale.photos).catch(() => {})
