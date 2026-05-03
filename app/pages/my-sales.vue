@@ -53,7 +53,7 @@ function statusClass(s: GarageSale): string {
             <div>
                 <h1 class="font-display text-3xl font-bold text-gray-900">Your garage sales</h1>
                 <p class="mt-2 text-sm text-gray-600">
-                    Sales you've posted. Past sales are kept for 7 days, then auto-deleted.
+                    Sales you've posted. Past sales are kept for 30 days, then auto-deleted.
                 </p>
             </div>
             <NuxtLink to="/post" class="btn-primary !min-h-[40px] !px-4 !py-2 text-sm">

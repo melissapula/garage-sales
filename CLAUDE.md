@@ -65,7 +65,7 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 ### Lifecycle / cron
 
-- A pg_cron job runs nightly at 03:00 UTC: `delete from garage_sales where end_date < current_date - interval '7 days'`.
+- A pg_cron job runs nightly at 03:00 UTC: `delete from garage_sales where end_date < current_date - interval '30 days'`.
 - Sale-photo storage cleanup happens client-side when the owner deletes the sale (best-effort).
 
 ### Migrations (in order)

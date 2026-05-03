@@ -133,7 +133,7 @@ Nuxt's Nitro engine auto-detects Vercel — no `vercel.json` needed.
 ### Lifecycle
 
 - Past sales (end_date < today) are hidden from the browse map, but remain visible to their owner on `/my-sales`.
-- A pg_cron job runs nightly at 03:00 UTC and deletes any sale whose end_date is more than 7 days past.
+- A pg_cron job runs nightly at 03:00 UTC and deletes any sale whose end_date is more than 30 days past.
 - Storage cleanup of photos happens client-side when the owner deletes the sale.
 
 ## Project layout
