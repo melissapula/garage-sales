@@ -240,6 +240,13 @@ onMounted(async () => {
         syncFromProps()
     })
 
+    // Mapbox's own canvas click — fires reliably on touch devices when the
+    // synthesized DOM click gets eaten by Mapbox's gesture system. It does
+    // NOT fire when a marker is tapped because marker clicks stopPropagation.
+    map.on('click', () => {
+        if (activePopupPersistent) emit('clear')
+    })
+
     await useSavedSales().refresh()
 })
 
