@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /signup
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /confirm
+Disallow: /account
+Disallow: /my-sales
+Disallow: /post
+Disallow: /inbox
+Disallow: /itineraries
+
+Sitemap: https://www.garagesaletracker.app/sitemap.xml

@@ -111,22 +111,41 @@ export default defineNuxtConfig({
         },
     },
 
-    // routeRules with swr only apply in production. In dev, Nitro's payload
-    // cache writes blow up on Windows (ENOENT on .nuxt/cache/nuxt/payload/…).
-    routeRules:
-        process.env.NODE_ENV === 'production'
+    routeRules: {
+        // Auth + private routes — keep search engines out. These pages
+        // are either user-specific or low-content forms that would
+        // dilute our crawl budget and pollute the index. Setting
+        // `X-Robots-Tag` at the HTTP level is more authoritative than
+        // a `<meta>` and applies even to non-HTML responses.
+        '/login': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/signup': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/forgot-password': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/reset-password': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/confirm': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/account': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/my-sales': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/post': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/post/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/inbox': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/inbox/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/itineraries': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+        '/itineraries/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
+
+        // Production-only SWR. Skipped in dev because Nitro's payload
+        // cache writes blow up on Windows (ENOENT on
+        // .nuxt/cache/nuxt/payload/…). No SWR on `/sale/**` — owner
+        // status updates (running_late, winding_down, closed) need to
+        // land near-real-time, otherwise a buyer following a stale
+        // link sees a "closed" sale the system already considers gone.
+        ...(process.env.NODE_ENV === 'production'
             ? {
                   '/privacy': { swr: 86400 },
                   '/terms': { swr: 86400 },
                   '/': { swr: 3600 },
-                  // No SWR on `/sale/**` — owner status updates
-                  // (running_late, winding_down, closed) need to land
-                  // near-real-time. A buyer following a stale link
-                  // would otherwise see a "closed" sale that the
-                  // system already considers gone.
                   '/share/**': { swr: 600 },
               }
-            : {},
+            : {}),
+    },
 
     vite: {
         optimizeDeps: {

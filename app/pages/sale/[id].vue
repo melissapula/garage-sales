@@ -57,6 +57,58 @@ useSeoMeta({
     twitterCard: 'summary_large_image',
 })
 
+// JSON-LD Event schema so Google can show rich event-result cards in
+// search (date, location, image inline). Built from the same sale data
+// used for the visible page; the `useHead` script tag is only emitted
+// when sale data exists (sale.value never null here post-throw, but
+// the computed guards against any transient nullability).
+useHead({
+    script: computed(() => {
+        if (!sale.value) return []
+        const s = sale.value
+        const startsAt = s.start_time
+            ? `${s.start_date}T${s.start_time}:00`
+            : s.start_date
+        const endsAt = s.end_time
+            ? `${s.end_date}T${s.end_time}:00`
+            : s.end_date
+        const ld = {
+            '@context': 'https://schema.org',
+            '@type': 'Event',
+            name: s.title,
+            description: s.description ?? `Garage sale at ${s.address}.`,
+            startDate: startsAt,
+            endDate: endsAt,
+            eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+            eventStatus:
+                s.status === 'closed'
+                    ? 'https://schema.org/EventCancelled'
+                    : 'https://schema.org/EventScheduled',
+            location: {
+                '@type': 'Place',
+                name: s.address,
+                address: s.address,
+                geo: {
+                    '@type': 'GeoCoordinates',
+                    latitude: s.lat,
+                    longitude: s.lng,
+                },
+            },
+            image: s.photos?.length
+                ? s.photos
+                : [`${config.public.siteUrl}/og-image.png`],
+            url: shareUrl.value,
+            organizer: {
+                '@type': 'Organization',
+                name: 'Garage Sale Tracker',
+                url: config.public.siteUrl,
+            },
+            isAccessibleForFree: true,
+        }
+        return [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld) }]
+    }),
+})
+
 function shareToFacebook() {
     if (!sale.value) return
     const u = encodeURIComponent(shareUrl.value)

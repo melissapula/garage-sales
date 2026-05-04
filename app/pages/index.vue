@@ -1,5 +1,19 @@
 <script setup lang="ts">
 const user = useSupabaseUser()
+const config = useRuntimeConfig()
+
+useSeoMeta({
+    title: 'Garage Sale Tracker — find every yard sale near you, plan your route',
+    description:
+        "Free garage-sale map. Browse every yard, garage, and estate sale in your area, save the ones you want to hit, and we'll route you through them in the best order. Sellers can post for free.",
+    ogTitle: 'Garage Sale Tracker',
+    ogDescription:
+        "Find every yard, garage, and estate sale near you. Pick the ones you want to hit and we'll plan the best route.",
+    ogImage: () => `${config.public.siteUrl}/og-image.png`,
+    ogUrl: () => config.public.siteUrl as string,
+    ogType: 'website',
+    twitterCard: 'summary_large_image',
+})
 </script>
 
 <template>
