@@ -31,6 +31,13 @@ Brand:
     - `0005_messaging.sql` — contact toggle + message threads + RLS
     - `0006_sale_status.sql` — owner status column on sales
     - `0007_realtime_messaging.sql` — adds messaging tables to the Supabase Realtime publication
+    - `0008_delete_account.sql` — `delete_my_account()` RPC for self-service account deletion
+    - `0009_storage_image_only.sql` — restricts `sale-photos` bucket to image MIME types
+    - `0010_public_routes.sql` — public-share columns on `routes`
+    - `0011_extend_cleanup_window.sql` — extends sale cleanup grace period to 30 days past `end_date`
+    - `0012_messaging_rls_hardening.sql` — locks `messages` UPDATE to `read_at` only; threads INSERT requires `garage_sale_id` + `contact_enabled`; drops user-facing UPDATE policy on threads
+    - `0013_unread_counts_rpc.sql` — `unread_counts_by_thread()` RPC replacing the inbox's N+1 fan-out
+    - `0014_thread_hide_per_user.sql` — per-user thread hide flags + `hide_thread()` and `find_or_create_thread()` RPCs; drops user-facing thread DELETE
 4. In Supabase, enable email confirmation OR manually confirm your test user under **Authentication → Users**.
 5. `npm run dev` and open http://localhost:3000
 
@@ -121,15 +128,25 @@ Nuxt's Nitro engine auto-detects Vercel — no `vercel.json` needed.
 
 `/inbox` and `/inbox/[id]` — auth-required.
 
-- Inbox lists conversations sorted by latest activity, with the other person's display name, sale subject, last-message preview, relative timestamp, and an unread-count badge.
-- Thread page shows messages as bubbles (yours right-aligned in orange, theirs left-aligned in cream), Enter-to-send compose box (4000-char cap), auto-marks unread messages read on view.
-- Started by clicking "Message owner" on a sale's detail page — finds-or-creates a thread for that (you, owner, sale) tuple.
-- Navbar shows an unread-count badge that updates on sign-in/out and after each thread visit.
-- **Realtime** — incoming messages stream in via Supabase Realtime; the inbox list and unread badge also update live without refreshing.
+- Inbox lists conversations sorted by latest activity, with the other person's display name, sale subject, last-message preview, relative timestamp, and an unread-count badge. Skeleton rows render during a refetch so a sign-in transition doesn't flash the empty state.
+- Thread page shows messages as bubbles (yours right-aligned in orange, theirs left-aligned in cream), 4000-char compose box, auto-marks unread messages read on view. URLs in messages render as clickable links via `<AutoLinkText>` (sender bubble uses white-underlined links to read against the orange).
+- **Enter-to-send** is gated to devices with a real keyboard (`(hover: hover) and (pointer: fine)`). On mobile virtual keyboards Enter inserts a newline and the Send button ships the message.
+- Started by clicking "Message owner" on a sale's detail page → calls the `find_or_create_thread()` RPC, which validates `contact_enabled` + sale ownership, finds an existing thread or inserts a new one, and auto-unhides the thread for the caller (so reopening a conversation you'd hidden doesn't create a duplicate).
+- **Remove from inbox** — clicking the link in a thread calls the `hide_thread()` RPC, which only flips the caller's hide flag. The other participant still has the conversation and every message. A new reply from the other side resurfaces the thread for the hider via the on-message trigger.
+- Navbar shows an unread-count badge driven by realtime deltas — INSERT from the other side increments, mark-read UPDATE decrements — instead of `count(*)` refetches per event.
+- **Realtime** — incoming messages stream in via Supabase Realtime; the inbox list refreshes live and the unread badge updates via deltas without refreshing.
 
 ### Account
 
-`/account` — auth-required. Edit your display name (the one shown in messages).
+`/account` — auth-required. Edit your display name (the one shown in messages). The danger-zone "Delete my account" requires typing **DELETE** to confirm and calls the `delete_my_account()` RPC, which cascades through every sale, saved sale, route, and conversation tied to the user. Storage cleanup pages through the user's `sale-photos/<userId>/` folder so accounts with thousands of photos don't leave orphans.
+
+### Reset password
+
+`/reset-password` — checks `getSession()` on mount; without a recovery session it shows an "expired link" notice with a back-link to `/forgot-password`. The form has a confirm-password field with inline mismatch validation.
+
+### Accessibility
+
+`ConfirmModal` and `PhotoLightbox` use a `useFocusTrap` composable: focus is moved into the dialog on open, Tab cycles inside, and focus returns to the trigger on close. ConfirmModal's first focusable is Cancel by default, so a stray Enter on first paint cancels rather than firing destructive actions; Escape from anywhere still cancels.
 
 ### Lifecycle
 
@@ -145,21 +162,24 @@ app/
   assets/css/tailwind.css
   components/
     BrowseFilters.vue, BrowseSaleCard.vue, BrowseSaleDetail.vue,
-    BrowseMap.vue, RouteMap.vue, PhotoUploader.vue, PhotoLightbox.vue
+    BrowseMap.vue, RouteMap.vue, PhotoUploader.vue, PhotoLightbox.vue,
+    ConfirmModal.vue, ToastContainer.vue, AutoLinkText.vue
   composables/
     useGarageSales.ts, useSavedSales.ts, useRoutes.ts,
     useRouteOptimizer.ts, useGeocode.ts, useMessaging.ts,
-    useSalePhotos.ts
+    useSalePhotos.ts, useToast.ts, useConfirm.ts, useFocusTrap.ts
   layouts/default.vue
   pages/
     index.vue, browse.vue, login.vue, signup.vue,
     forgot-password.vue, reset-password.vue, confirm.vue,
     account.vue, my-sales.vue, post.vue, post/[id].vue, sale/[id].vue,
     itineraries/index.vue, itineraries/[id].vue,
-    inbox/index.vue, inbox/[id].vue
+    inbox/index.vue, inbox/[id].vue, share/[id].vue
   utils/saleStatus.ts, utils/filters.ts, utils/ownerStatus.ts
 scripts/
   seed-sales.mjs, seed-data.example.json
+server/api/notifications/
+  message.post.ts
 supabase/migrations/
-  0001_init.sql … 0007_realtime_messaging.sql
+  0001_init.sql … 0014_thread_hide_per_user.sql
 ```

@@ -1,7 +1,7 @@
 # Bemidji Garage Sales — Project Context for Claude
 
 > Read this file at the start of every session to get fully up to speed.
-> Last updated: 2026-05-04
+> Last updated: 2026-05-04 (after audit-driven hardening + per-user thread hide)
 
 ---
 
@@ -60,8 +60,8 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 | `routes`          | A planned outing on a specific day.                                     | `route_date date not null`. RLS: owner-only.                                              |
 | `route_stops`     | Ordered sales within a route.                                           | PK `(route_id, garage_sale_id)`, `position int`. RLS: via parent route.                   |
 | `profiles`        | One row per auth user with a `display_name`.                            | Auto-created via trigger on `auth.users` insert. RLS: public read, owner-only write.       |
-| `message_threads` | A conversation between two users, optionally about a sale.              | `participant_one_id`, `participant_two_id`, `garage_sale_id` nullable. RLS: participants. |
-| `messages`        | Individual messages.                                                    | `read_at` for unread counts. Trigger updates parent thread's `last_message_at` + preview. |
+| `message_threads` | A conversation between two users, optionally about a sale.              | `participant_one_id`, `participant_two_id`, `garage_sale_id`, `hidden_for_one`, `hidden_for_two`. SELECT RLS filters out threads hidden for the caller. INSERT requires `garage_sale_id is not null`, the linked sale's `contact_enabled = true`, and the sale owner is one of the two participants. No user-facing UPDATE or DELETE policy — those flow through `find_or_create_thread()` and `hide_thread()` RPCs. |
+| `messages`        | Individual messages.                                                    | `read_at` for unread counts. UPDATE is column-restricted to `read_at` only (column-level grant on top of RLS). Trigger maintains parent thread's `last_message_at` / preview AND un-hides for the recipient on a new message. |
 
 ### Lifecycle / cron
 
@@ -77,6 +77,13 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 5. `0005_messaging.sql` — adds `garage_sales.contact_enabled`, `message_threads`, `messages`, and the last-message-update trigger.
 6. `0006_sale_status.sql` — adds `garage_sales.status` column with check constraint.
 7. `0007_realtime_messaging.sql` — adds `messages` and `message_threads` to the `supabase_realtime` publication.
+8. `0008_delete_account.sql` — `delete_my_account()` RPC for user-initiated account deletion (cascades through everything tied to the user).
+9. `0009_storage_image_only.sql` — restricts `sale-photos` bucket to image MIME types.
+10. `0010_public_routes.sql` — adds public-share columns to `routes`.
+11. `0011_extend_cleanup_window.sql` — extends the pg_cron sale-cleanup grace period from 7 to 30 days past `end_date`.
+12. `0012_messaging_rls_hardening.sql` — column-level grant restricts `messages` UPDATE to `read_at` only; new threads INSERT policy requires non-null `garage_sale_id`, `contact_enabled = true`, and sale owner is a participant; user-facing UPDATE policy on threads dropped (the on-message trigger is `security definer` and unaffected).
+13. `0013_unread_counts_rpc.sql` — adds `unread_counts_by_thread()` RPC (security invoker) returning one row per thread with unread messages from the other side, replacing the inbox's N+1 fan-out.
+14. `0014_thread_hide_per_user.sql` — adds `hidden_for_one` / `hidden_for_two` columns; updates SELECT RLS so a hidden thread disappears for the hider only; updates `update_thread_on_message` trigger to un-hide for the recipient on each new message; adds `hide_thread(uuid)` and `find_or_create_thread(uuid, uuid)` security-definer RPCs; drops the user-facing DELETE policy on threads.
 
 ---
 
@@ -104,11 +111,11 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 ### Components
 
-`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader`, `PhotoLightbox`.
+`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader`, `PhotoLightbox`, `ConfirmModal`, `ToastContainer`, `AutoLinkText` (renders bare http(s) URLs in user text as safe anchor tags via segment-based parsing — no `v-html`).
 
 ### Composables
 
-`useGarageSales`, `useSavedSales`, `useRoutes`, `useRouteOptimizer` (with `optimizeRoute`, `buildRouteFromOrder`, `buildTimeline`, `getCurrentPosition`), `useGeocode` (forward + reverse), `useMessaging` (`findOrCreateThread`, `sendMessage`, `markThreadRead`, `fetchInbox`, `fetchThreadWithMessages`, `useUnreadCount`), `useSalePhotos`.
+`useGarageSales` (with `findOverlappingSale` + `findOverlappingSaleWithRetry`), `useSavedSales`, `useRoutes`, `useRouteOptimizer` (with `optimizeRoute`, `buildRouteFromOrder`, `buildTimeline`, `getCurrentPosition`), `useGeocode` (forward + reverse), `useMessaging` (`findOrCreateThread`, `sendMessage`, `markThreadRead`, `hideThread`, `fetchInbox`, `fetchThreadWithMessages`, `useUnreadCount` with `incrementUnread` / `decrementUnread`), `useSalePhotos`, `useToast` (monotonic IDs), `useConfirm`, `useFocusTrap` (modal focus management — captures previously focused element, traps Tab inside container, restores focus on close).
 
 ### Utils
 
@@ -124,13 +131,23 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 - **Timeline:** `buildTimeline` consumes `stopLegs` (excludes the return-home leg). Default 30 min per stop. Departure defaults to 08:00 on the route's date. The return-home entry shows arrival-home time computed from the last stop's depart time + return-leg drive seconds.
 - **Maps export:** Google Maps URL `dir/?api=1&...` and Apple Maps `?saddr&daddr=A+to:B`. Round-trip toggle is honored. Google caps at 9 waypoints; the UI warns when stops are dropped.
 - **Facebook share:** standard share dialog (`facebook.com/sharer/sharer.php?u=...`). We can't auto-target a specific group — Meta deprecated `publish_to_groups` for general apps. The OG meta tags on `/sale/[id]` give the dialog a rich preview once the site is deployed.
-- **Messaging:** thread is keyed by (pair of participants, sale_id). Find-or-create on first message. Unread count = my unread messages across all threads (RLS-filtered). Shown as a navbar badge.
-- **Realtime:** `/inbox/[id]` subscribes to message INSERTs filtered to its `thread_id` and appends them live. `/inbox` subscribes to all message INSERTs (RLS-filtered) and refreshes. The default layout subscribes to message inserts/updates and refreshes the navbar badge. Channels are removed on unmount.
+- **Messaging:** thread is keyed by (pair of participants, sale_id). Find-or-create runs server-side via the `find_or_create_thread()` security-definer RPC, which validates `contact_enabled` + sale ownership and auto-unhides the thread for the caller (so a hidden thread doesn't get duplicated when a user re-messages the owner). Unread count = my unread messages across all threads (RLS-filtered). Shown as a navbar badge.
+- **Per-user thread hide.** "Remove from inbox" on `/inbox/[id]` calls the `hide_thread()` RPC, which flips `hidden_for_one` or `hidden_for_two` based on which participant the caller is. The other side keeps the conversation + every message. A new reply from the other side resurfaces the thread for the hider via the `update_thread_on_message` trigger. Physical thread DELETE is gone.
+- **Realtime:** `/inbox/[id]` subscribes to message INSERTs filtered to its `thread_id` and appends them live. `/inbox` subscribes to all message INSERTs (RLS-filtered) and refreshes the threads list. The default layout subscribes to message INSERT/UPDATE events and updates the navbar unread badge via deltas (increment on INSERT from the other side, decrement on mark-read UPDATE) — no per-event `count(*)` refetch. Channels are removed on unmount.
+- **Inbox unread counts.** The per-thread unread badges in `/inbox` come from a single `unread_counts_by_thread()` RPC call inside `fetchInbox`, instead of one count query per thread.
 - **Owner status:** `garage_sales.status` is one of `open` (default), `running_late`, `winding_down`, `closed`. Closed sales are filtered out of `/browse` (`fetchActiveSales` adds `.neq('status', 'closed')`) but still visible to the owner on `/my-sales`. The owner sets status from quick-tap pills on `/sale/[id]`. Banner shows on detail and inline status badge shows on cards/popovers.
 - **Photo lightbox:** `PhotoLightbox.vue` is a teleport-to-body modal with arrow-key + swipe + Esc + click-outside close. Fixed body overflow while open.
 - **Browse map auto-centers on user location.** On first visit to `/browse`, the page prompts for `navigator.geolocation` and, if granted, centers the map on the user's coordinates. The result (granted+coords or denied) is cached in `localStorage` under the key `gst:user-location` so we never re-prompt; users can opt in later via the on-map "📍" `GeolocateControl` button. If the user moves cities, they need to either tap that button or clear browser data — there's no TTL on the cache yet.
 - **Mobile browse tabs are mutually exclusive.** On `/browse` mobile, tapping list/map/filters clears any selected sale (via `clearSelection`), so the list tab shows the full filtered list and the map tab shows all the filtered pins. Selecting a sale (from list or pin) shows the detail card stacked above the map by default.
 - **Mapbox container resize.** `BrowseMap.vue` runs a `ResizeObserver` on its container and calls `map.resize()` on every change. Mapbox's built-in `trackResize` only listens to *window* resizes, so without this the canvas would freeze at its initial size whenever internal layout shifts (mobile stacked detail+map, tab swaps) grew the container — pins past the original size would float over empty cream.
+- **BrowseMap marker rebuild watch.** Watches a stable `id:lat:lng` signature instead of `props.sales` deeply, so a sale-status update (or any non-spatial property change) doesn't tear down + re-create every marker mid-hover. Popup HTML reads `props.sales.find(...)` on each open, so non-marker fields stay live without a rebuild.
+- **Modal focus traps.** `ConfirmModal` and `PhotoLightbox` use `useFocusTrap` to focus the first focusable element on open, trap Tab, and restore focus to the trigger on close. ConfirmModal also dropped the global Enter-anywhere-confirms handler — Cancel is the first focusable, so a stray Enter on first paint cancels rather than firing destructive actions.
+- **Autolinking user text.** Sale descriptions (in `BrowseSaleDetail` + `sale/[id]`) and message bodies (in `inbox/[id]`) render through `<AutoLinkText :text>`. URL detection is segment-based (no `v-html`); trailing punctuation common at sentence-end (`.,!?]) `) is peeled off so prose reads naturally; sender bubbles in the inbox pass a custom `link-class` so links read as white-underlined against the orange bubble.
+- **Mobile Enter-to-send.** `/inbox/[id]`'s textarea only auto-submits on `Enter` for devices matching `(hover: hover) and (pointer: fine)` — i.e. real keyboards. On phones / touch devices, Enter inserts a newline as the on-screen keyboard expects, and Send is the on-screen button.
+- **Photo uploads.** `PhotoUploader` runs uploads in parallel with a concurrency cap of 3, using `Promise.allSettled` so one bad file doesn't kill the batch. Non-image files are filtered up front and reported as a single inline notice.
+- **Post form dup-check.** `findOverlappingSaleWithRetry` retries once after 300ms before giving up. Both `/post` and `/post/[id]` track a `dupCheckFailed` flag; if both attempts fail the sale still posts and the user sees a `toast.info` urging them to double-check the map.
+- **Reset-password defensive UI.** `/reset-password` checks `getSession()` on mount; without a recovery session it shows an amber "expired link" notice with a back-link to `/forgot-password`. The form has a confirm-password field with inline mismatch validation.
+- **`/inbox` skeleton.** Three pulsing rows render when `pending && !threads?.length`, so a user-state-change refetch (sign-in, account switch) no longer flashes the empty state.
 
 ### Environment variables (in `.env`, gitignored)
 
@@ -179,3 +196,5 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 - **Sale photos cleanup is best-effort.** When a sale is deleted, the client tries to remove its photos from storage but doesn't block on failure.
 - **Status `closed` hides from browse but not from `/my-sales`.** Owner can revert it to `open` at any time. Past sales (date-based) and closed sales (status-based) are both excluded from the public map.
 - **Realtime channels** are owned by the page/layout that subscribes; teardown happens in `onBeforeUnmount` via `supabase.removeChannel(channel)`. Don't forget this when adding new subscribers — leaked channels burn Supabase realtime quota.
+- **No physical thread DELETE.** As of migration 0014 the user-facing DELETE policy on `message_threads` is gone — "Remove from inbox" only flips a per-user hide flag. If a future feature genuinely needs to wipe a thread (admin tooling, legal removal, etc.) it'll need a service-role escape hatch, not a user-visible button.
+- **Inbox unread is delta-driven, not refetch-driven.** The layout's realtime channel increments / decrements `unread.count` from `payload.new.sender_id` instead of refetching `count(*)`. This requires that the only legal `messages` UPDATE is `read_at` (enforced by 0012's column-level grant) — if that constraint loosens, the delta math has to change too.
