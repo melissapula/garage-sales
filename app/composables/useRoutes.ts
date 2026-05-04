@@ -51,14 +51,14 @@ export async function fetchRouteWithStops(id: string) {
 
 export async function fetchSavedSalesWithDetails() {
     const supabase = useSupabaseClient()
-    const today = todayLocalISO()
     const { data, error } = await supabase
         .from('saved_sales')
         .select('garage_sale_id, created_at, sale:garage_sales!inner(*)')
-        // Drop saved sales whose date already passed — the itineraries
-        // pages filter them client-side anyway, but excluding them here
-        // saves wire bytes and avoids the join when the sale is gone.
-        .gte('garage_sales.end_date', today)
+        // We DO ship expired sales (end_date < today) and tombstones
+        // (deleted_at not null) so the itineraries page can render them
+        // with their respective "ended" / "removed" notices instead of
+        // silently dropping them. Cron eventually purges tombstones >30
+        // days old; expired sales hang around as long as the row exists.
         .order('created_at', { ascending: false })
     if (error) throw error
     return (data ?? []) as unknown as Array<{

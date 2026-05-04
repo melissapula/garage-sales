@@ -13,11 +13,13 @@ const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
         .from('garage_sales')
         .select('*')
         .eq('id', id)
+        .is('deleted_at', null)
         .maybeSingle()
     if (err) throw err
     if (!data) {
-        // Real 404 so search engines don't index "sale not found" cards
-        // as 200 OK content, and so the styled error page renders.
+        // Real 404 — covers truly missing rows AND tombstones (owner
+        // soft-deleted the listing). Saved-sales / route-stops still
+        // render the tombstone with a "removed" notice from their join.
         throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
     }
     return data as GarageSale
@@ -145,12 +147,20 @@ async function deleteSale() {
     })
     if (!ok) return
     const photoUrls = sale.value.photos ?? []
-    const { error: err } = await supabase.from('garage_sales').delete().eq('id', sale.value.id)
+    // Soft-delete via `deleted_at` so users with this sale in their
+    // saved list or a planned route see a "removed" tombstone instead
+    // of silent disappearance. The nightly cron physically deletes
+    // tombstones older than 30 days (cascading to saved/stops then).
+    const { error: err } = await supabase
+        .from('garage_sales')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', sale.value.id)
     if (err) {
         toast.error(err.message)
         return
     }
-    // Best-effort cleanup of photos in storage.
+    // Best-effort cleanup of photos in storage. Photos aren't shown on
+    // the tombstone, and the row gets fully purged in 30 days anyway.
     if (photoUrls.length) deletePhotos(photoUrls).catch(() => {})
     toast.success('Sale deleted.')
     router.push('/browse')

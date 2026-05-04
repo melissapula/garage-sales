@@ -15,9 +15,13 @@ const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, as
         .from('garage_sales')
         .select('*')
         .eq('id', id)
+        .is('deleted_at', null)
         .maybeSingle()
     if (error) throw error
-    return data as GarageSale | null
+    if (!data) {
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+    }
+    return data as GarageSale
 })
 
 if (existing.value && user.value && existing.value.user_id !== user.value.id) {

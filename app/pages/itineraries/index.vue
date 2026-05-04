@@ -82,8 +82,14 @@ async function deleteRoute(id: string) {
     refreshRoutes()
 }
 
-const upcomingSavedSales = computed(() =>
-    (savedSales.value ?? []).filter((s) => s.sale && saleStatus(s.sale) !== 'past'),
+// Show every saved sale, including expired and removed ones — each
+// gets its own visual treatment (yellow / red) so the user knows why
+// they can no longer visit it. The tombstone for a removed sale stays
+// for ~30 days then cron-purges (cascade-drops the saved row);
+// expired entries persist until the user removes them or the cron
+// finally deletes the past-end-dated sale.
+const displayedSavedSales = computed(() =>
+    (savedSales.value ?? []).filter((s) => s.sale),
 )
 </script>
 
@@ -98,22 +104,55 @@ const upcomingSavedSales = computed(() =>
         <section class="mt-8">
             <h2 class="font-display text-xl font-bold text-gray-900">Your saved sales</h2>
             <p class="mt-1 text-sm text-gray-600">
-                Sales you've tapped <em>Let's go!</em> on. Past ones drop off automatically.
+                Sales you've tapped <em>Let's go!</em> on. Ended sales show in yellow,
+                and ones the owner removed show in red — clear them with <em>Remove</em>
+                when you're done.
             </p>
 
-            <ul v-if="upcomingSavedSales.length" class="mt-4 space-y-2">
+            <ul v-if="displayedSavedSales.length" class="mt-4 space-y-2">
                 <li
-                    v-for="row in upcomingSavedSales"
+                    v-for="row in displayedSavedSales"
                     :key="row.garage_sale_id"
-                    class="flex items-start gap-3 rounded-xl bg-white p-3 ring-1 ring-orange-100"
+                    class="flex items-start gap-3 rounded-xl p-3 ring-1"
+                    :class="
+                        isRemovedSale(row.sale)
+                            ? 'bg-red-50 ring-red-200'
+                            : isExpiredSale(row.sale)
+                                ? 'bg-yellow-50 ring-yellow-200'
+                                : 'bg-white ring-orange-100'
+                    "
                 >
                     <div class="flex-1">
+                        <p
+                            v-if="isRemovedSale(row.sale)"
+                            class="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700"
+                        >
+                            ⚠ Removed by the owner
+                        </p>
+                        <p
+                            v-else-if="isExpiredSale(row.sale)"
+                            class="mb-1 text-xs font-semibold uppercase tracking-wide text-yellow-800"
+                        >
+                            ⏳ This sale has ended
+                        </p>
                         <NuxtLink
+                            v-if="!isRemovedSale(row.sale)"
                             :to="`/sale/${row.garage_sale_id}`"
-                            class="font-medium text-gray-900 hover:text-brand-600"
+                            class="font-medium hover:text-brand-600"
+                            :class="
+                                isExpiredSale(row.sale)
+                                    ? 'text-gray-700 line-through'
+                                    : 'text-gray-900'
+                            "
                         >
                             {{ row.sale.title }}
                         </NuxtLink>
+                        <span
+                            v-else
+                            class="font-medium text-gray-700 line-through"
+                        >
+                            {{ row.sale.title }}
+                        </span>
                         <div class="mt-0.5 text-xs text-gray-600">{{ row.sale.address }}</div>
                         <div class="mt-0.5 text-xs text-gray-500">
                             {{ formatDateRange(row.sale.start_date, row.sale.end_date) }}

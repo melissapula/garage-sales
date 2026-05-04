@@ -15,6 +15,7 @@ const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
             .from('garage_sales')
             .select('*')
             .eq('user_id', user.value.id)
+            .is('deleted_at', null)
             .order('start_date', { ascending: false })
         if (error) throw error
         return (data ?? []) as GarageSale[]
@@ -30,7 +31,12 @@ async function deleteSale(sale: GarageSale) {
         tone: 'danger',
     })
     if (!ok) return
-    const { error } = await supabase.from('garage_sales').delete().eq('id', sale.id)
+    // Soft-delete via deleted_at — see sale/[id].vue for the rationale
+    // (tombstones in saved-sales / route-stops; cron purges in 30 days).
+    const { error } = await supabase
+        .from('garage_sales')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', sale.id)
     if (error) {
         toast.error(error.message)
         return

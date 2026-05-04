@@ -46,12 +46,16 @@ const { data: savedSales, refresh: refreshSaved } = await useAsyncData(
 )
 
 // Saved sales available on this route's date that haven't been added yet.
+// Removed (soft-deleted) sales are excluded — you can't add a tombstone to a
+// route. Existing route stops that became tombstones still render with a
+// "removed" notice (see template) and are skipped in route calculations.
 const availableSaved = computed(() => {
     if (!data.value) return []
     const inRoute = new Set(data.value.stops.map((s) => s.garage_sale_id))
     const day = data.value.route.route_date
     return (savedSales.value ?? [])
         .filter((row) => !inRoute.has(row.garage_sale_id))
+        .filter((row) => !isRemovedSale(row.sale))
         .filter((row) => row.sale.start_date <= day && day <= row.sale.end_date)
 })
 
@@ -230,13 +234,24 @@ function applyRouteResult(result: OptimizedRoute, opts: { reorder: boolean }) {
     }
 }
 
+// Stops minus any tombstones (sales the owner soft-deleted). We keep
+// tombstones in the visible list so the user sees what was removed,
+// but exclude them from every routing / mapping calculation —
+// optimizer, directions, Google/Apple Maps export, drive timeline.
+const activeStopsInOrder = computed(() =>
+    (data.value?.stops ?? []).filter((s) => !isRemovedSale(s.sale)),
+)
+const activeDraggable = computed(() =>
+    draggableStops.value.filter((s) => !isRemovedSale(s.sale)),
+)
+
 async function optimize() {
-    if (!data.value || data.value.stops.length === 0) return
+    if (!data.value || activeStopsInOrder.value.length === 0) return
     if (!startResolved.value) {
         optimizeError.value = 'Set a starting point first.'
         return
     }
-    if (data.value.stops.length + 1 > 12) {
+    if (activeStopsInOrder.value.length + 1 > 12) {
         optimizeError.value = 'Optimization supports up to 11 stops at a time.'
         return
     }
@@ -246,13 +261,25 @@ async function optimize() {
         // For non-round-trip optimization, the user's LAST dragged stop
         // becomes the fixed endpoint. We feed Mapbox the stops in dragged
         // order so the destination=last pin lines up with the user's intent.
-        const stopsInput = roundTrip.value
-            ? data.value.stops.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }))
-            : draggableStops.value.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }))
+        const inputStops = roundTrip.value ? activeStopsInOrder.value : activeDraggable.value
+        // Track which full-stops index each active input index corresponds
+        // to so we can map Mapbox's active-relative result.stopOrder back
+        // to indices in `data.value.stops` (which still contains tombstones).
+        const fullIdxFor = inputStops.map((s) =>
+            data.value!.stops.findIndex((fs) => fs.garage_sale_id === s.garage_sale_id),
+        )
+        const stopsInput = inputStops.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }))
         const result = await optimizeRoute(startResolved.value, stopsInput, {
             roundTrip: roundTrip.value,
         })
-        applyRouteResult(result, { reorder: true })
+        const activeOrderFullIdx = result.stopOrder.map((i) => fullIdxFor[i]!)
+        const tombstoneFullIdx = data.value!.stops
+            .map((s, i) => (isRemovedSale(s.sale) ? i : -1))
+            .filter((i) => i >= 0)
+        applyRouteResult(
+            { ...result, stopOrder: [...activeOrderFullIdx, ...tombstoneFullIdx] },
+            { reorder: true },
+        )
     } catch (e) {
         optimizeError.value = e instanceof Error ? e.message : 'Optimization failed'
     } finally {
@@ -261,7 +288,7 @@ async function optimize() {
 }
 
 async function useMyOrder() {
-    if (!data.value || draggableStops.value.length === 0) return
+    if (!data.value || activeDraggable.value.length === 0) return
     if (!startResolved.value) {
         optimizeError.value = 'Set a starting point first.'
         return
@@ -272,7 +299,7 @@ async function useMyOrder() {
         const result = await buildRouteFromOrder(
             startResolved.value,
             // Honor the order the user dragged into.
-            draggableStops.value.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat })),
+            activeDraggable.value.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat })),
             { roundTrip: roundTrip.value },
         )
         applyRouteResult(result, { reorder: false })
@@ -289,6 +316,14 @@ const stopsInVisitOrder = computed(() => {
     if (!optimizedOrder.value) return stops
     return optimizedOrder.value.map((i) => stops[i]).filter(Boolean) as typeof stops
 })
+
+// Same as stopsInVisitOrder but with tombstones filtered out — what the
+// timeline corresponds to. Mapbox's `result.stopLegs` only has entries
+// for the active stops we sent in, so timeline[i] aligns with the i-th
+// active stop in visit order, not the i-th overall stop.
+const routedStopsInOrder = computed(() =>
+    stopsInVisitOrder.value.filter((s) => !isRemovedSale(s.sale)),
+)
 
 // Keep the draggable mirror in sync with the canonical visit order.
 watch(
@@ -314,7 +349,9 @@ const visitOrderForMap = computed<number[] | null>(() =>
 const GOOGLE_MAX_WAYPOINTS = 9
 
 const mapsLinks = computed(() => {
-    const stops = stopsInVisitOrder.value
+    // Map exports only navigate to active stops — tombstones have no
+    // valid destination since the listing was removed.
+    const stops = stopsInVisitOrder.value.filter((s) => !isRemovedSale(s.sale))
     if (stops.length === 0) return null
 
     const stopCoords = stops.map((s) => `${s.sale.lat},${s.sale.lng}`)
@@ -547,7 +584,14 @@ const routeDateLabel = computed(() => {
                     >
                         <template #item="{ element: stop, index: i }">
                             <li
-                                class="flex items-start gap-3 rounded-xl bg-white p-3 ring-1 ring-orange-100"
+                                class="flex items-start gap-3 rounded-xl p-3 ring-1"
+                                :class="
+                                    isRemovedSale(stop.sale)
+                                        ? 'bg-red-50 ring-red-200'
+                                        : isExpiredSale(stop.sale)
+                                            ? 'bg-yellow-50 ring-yellow-200'
+                                            : 'bg-white ring-orange-100'
+                                "
                             >
                                 <button
                                     type="button"
@@ -569,17 +613,48 @@ const routeDateLabel = computed(() => {
                                     </svg>
                                 </button>
                                 <span
-                                    class="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-sm font-bold text-white"
+                                    class="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                                    :class="
+                                        isRemovedSale(stop.sale)
+                                            ? 'bg-red-400'
+                                            : isExpiredSale(stop.sale)
+                                                ? 'bg-yellow-500'
+                                                : 'bg-brand-500'
+                                    "
                                 >
                                     {{ i + 1 }}
                                 </span>
                                 <div class="flex-1 min-w-0">
+                                    <p
+                                        v-if="isRemovedSale(stop.sale)"
+                                        class="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700"
+                                    >
+                                        ⚠ Removed by the owner — skipped on this route
+                                    </p>
+                                    <p
+                                        v-else-if="isExpiredSale(stop.sale)"
+                                        class="mb-1 text-xs font-semibold uppercase tracking-wide text-yellow-800"
+                                    >
+                                        ⏳ This sale has ended
+                                    </p>
                                     <NuxtLink
+                                        v-if="!isRemovedSale(stop.sale)"
                                         :to="`/sale/${stop.garage_sale_id}`"
-                                        class="font-medium text-gray-900 hover:text-brand-600"
+                                        class="font-medium hover:text-brand-600"
+                                        :class="
+                                            isExpiredSale(stop.sale)
+                                                ? 'text-gray-700 line-through'
+                                                : 'text-gray-900'
+                                        "
                                     >
                                         {{ stop.sale.title }}
                                     </NuxtLink>
+                                    <span
+                                        v-else
+                                        class="font-medium text-gray-700 line-through"
+                                    >
+                                        {{ stop.sale.title }}
+                                    </span>
                                     <div class="mt-0.5 truncate text-xs text-gray-600">
                                         {{ stop.sale.address }}
                                     </div>
@@ -865,7 +940,7 @@ const routeDateLabel = computed(() => {
                     <button
                         type="button"
                         class="btn-secondary"
-                        :disabled="optimizing || !startResolved || data.stops.length === 0"
+                        :disabled="optimizing || !startResolved || activeStopsInOrder.length === 0"
                         @click="useMyOrder"
                     >
                         {{ optimizing ? 'Building…' : '📋 Use my order' }}
@@ -873,7 +948,7 @@ const routeDateLabel = computed(() => {
                     <button
                         type="button"
                         class="btn-primary"
-                        :disabled="optimizing || !startResolved || data.stops.length === 0"
+                        :disabled="optimizing || !startResolved || activeStopsInOrder.length === 0"
                         @click="optimize"
                     >
                         {{ optimizing ? 'Optimizing…' : '🧭 Optimize order' }}
@@ -938,7 +1013,7 @@ const routeDateLabel = computed(() => {
                             <div class="flex-1 min-w-0">
                                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                                     <span class="font-medium text-gray-900">
-                                        {{ stopsInVisitOrder[i]?.sale.title }}
+                                        {{ routedStopsInOrder[i]?.sale.title }}
                                     </span>
                                     <span class="text-xs text-gray-500">
                                         Drive {{ fmtDriveMin(entry.drivingSecondsFromPrev) }}

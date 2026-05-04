@@ -15,7 +15,19 @@ export interface GarageSale {
     photos: string[]
     contact_enabled: boolean
     status: SaleOwnerStatus
+    /**
+     * Set when the owner soft-deletes the sale. The row stays in the
+     * table for ~30 days so saved-sales / route-stops referencing it
+     * can render a "this sale was removed" tombstone instead of just
+     * silently vanishing. Browse / my-sales filter these out.
+     */
+    deleted_at: string | null
     created_at: string
+}
+
+/** Convenience predicate for tombstone rendering. */
+export function isRemovedSale(sale: { deleted_at?: string | null }): boolean {
+    return !!sale.deleted_at
 }
 
 export async function fetchActiveSales() {
@@ -24,6 +36,7 @@ export async function fetchActiveSales() {
     const { data, error } = await supabase
         .from('garage_sales')
         .select('*')
+        .is('deleted_at', null)
         .gte('end_date', today)
         .neq('status', 'closed')
         .order('start_date', { ascending: true })
@@ -69,6 +82,7 @@ export async function findOverlappingSale(
         .from('garage_sales')
         .select('id, title, start_date, end_date, address')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .gte('lat', lat - eps)
         .lte('lat', lat + eps)
         .gte('lng', lng - eps)

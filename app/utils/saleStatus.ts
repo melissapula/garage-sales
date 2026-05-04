@@ -12,6 +12,11 @@ export function saleStatus(sale: SaleDates, today = new Date()): SaleStatus {
     return 'active'
 }
 
+/** True when the sale's end_date is before today (local timezone). */
+export function isExpiredSale(sale: SaleDates, today = new Date()): boolean {
+    return saleStatus(sale, today) === 'past'
+}
+
 export function pinColor(status: SaleStatus): string {
     if (status === 'active') return '#22C55E'
     if (status === 'upcoming') return '#EAB308'

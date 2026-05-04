@@ -29,9 +29,21 @@ const { data } = await useAsyncData(`share-${id}`, async () => {
         .eq('id', r.user_id)
         .maybeSingle()
 
+    // Filter out stops whose sale was soft-deleted by the owner — public
+    // visitors don't need to see tombstones, they'd just be confused by
+    // stops they can't visit. The owner sees them in /itineraries/[id].
+    type ShareStop = {
+        route_id: string
+        garage_sale_id: string
+        position: number
+        sale: import('~/composables/useGarageSales').GarageSale
+    }
+    const allStops = (stops ?? []) as unknown as ShareStop[]
+    const visibleStops = allStops.filter((s) => !s.sale?.deleted_at)
+
     return {
         route: r as { id: string; name: string; route_date: string; is_public: boolean; user_id: string },
-        stops: (stops ?? []) as unknown as { route_id: string; garage_sale_id: string; position: number; sale: import('~/composables/useGarageSales').GarageSale }[],
+        stops: visibleStops,
         ownerName: profile?.display_name ?? 'A user',
     }
 })
