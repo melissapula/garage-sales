@@ -120,26 +120,28 @@ export async function fetchInbox(): Promise<ThreadWithDetails[]> {
         .in('id', Array.from(otherIds))
     const profileMap = new Map((profiles ?? []).map((p) => [p.id, p as Profile]))
 
-    // Unread count per thread (parallel).
-    const me = user.value.id
-    const enriched = await Promise.all(
-        threads.map(async (t) => {
-            const otherId = t.participant_one_id === me ? t.participant_two_id : t.participant_one_id
-            const { count } = await supabase
-                .from('messages')
-                .select('id', { count: 'exact', head: true })
-                .eq('thread_id', t.id)
-                .neq('sender_id', me)
-                .is('read_at', null)
-            return {
-                ...(t as MessageThread),
-                sale: (t as unknown as { sale: { id: string; title: string } | null }).sale,
-                other: profileMap.get(otherId) ?? null,
-                unreadCount: count ?? 0,
-            } as ThreadWithDetails
-        }),
+    // One grouped round-trip for unread counts across all my threads, in
+    // place of an N+1 fan-out (one count query per thread). The
+    // `unread_counts_by_thread` RPC is RLS-aware and only returns rows for
+    // threads the caller participates in.
+    const { data: unreadRows } = await supabase.rpc('unread_counts_by_thread')
+    const unreadMap = new Map<string, number>(
+        (unreadRows ?? []).map(
+            (r: { thread_id: string; unread_count: number | string }) =>
+                [r.thread_id, Number(r.unread_count)] as const,
+        ),
     )
-    return enriched
+
+    const me = user.value.id
+    return threads.map((t) => {
+        const otherId = t.participant_one_id === me ? t.participant_two_id : t.participant_one_id
+        return {
+            ...(t as MessageThread),
+            sale: (t as unknown as { sale: { id: string; title: string } | null }).sale,
+            other: profileMap.get(otherId) ?? null,
+            unreadCount: unreadMap.get(t.id) ?? 0,
+        } as ThreadWithDetails
+    })
 }
 
 export async function fetchThreadWithMessages(id: string) {
