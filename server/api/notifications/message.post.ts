@@ -84,7 +84,28 @@ export default defineEventHandler(async (event) => {
         return { skipped: 'recipient recently active' }
     }
 
-    // 4. Look up profiles + recipient email.
+    // 4. Atomic idempotency claim. INSERT … ON CONFLICT DO NOTHING is
+    // the cheapest "first writer wins" primitive here. If the row was
+    // already there (someone replayed the request, the sender's client
+    // double-fired, etc.) the insert returns no rows and we skip the
+    // email — preventing replay-driven Resend bill amplification.
+    const { data: claimed, error: claimErr } = await admin
+        .from('message_notifications')
+        .insert({ message_id: messageId })
+        .select('message_id')
+    if (claimErr) {
+        // Postgres `unique_violation` (23505) is our signal the row was
+        // already claimed by an earlier request — skip silently.
+        if (claimErr.code === '23505') {
+            return { skipped: 'already notified' }
+        }
+        throw createError({ statusCode: 500, statusMessage: claimErr.message })
+    }
+    if (!claimed || claimed.length === 0) {
+        return { skipped: 'already notified' }
+    }
+
+    // 5. Look up profiles + recipient email.
     const { data: profiles } = await admin
         .from('profiles')
         .select('id, display_name')
@@ -96,7 +117,7 @@ export default defineEventHandler(async (event) => {
     const recipientEmail = recipientAuth?.user?.email
     if (!recipientEmail) return { skipped: 'no recipient email' }
 
-    // 5. Build + send the email.
+    // 6. Build + send the email.
     const senderName = senderProfile?.display_name || 'Someone'
     const saleTitle = t.sale?.title
     const subject = saleTitle
