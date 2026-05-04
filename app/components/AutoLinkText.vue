@@ -35,8 +35,19 @@ const segments = computed<Segment[]>(() => {
     URL_RE.lastIndex = 0
     let match: RegExpExecArray | null
     while ((match = URL_RE.exec(text)) !== null) {
-        const url = match[1]!
-        const trailing = match[2] ?? ''
+        let url = match[1]!
+        let trailing = match[2] ?? ''
+        // Rebalance parens: many real URLs (Wikipedia, MSDN) contain
+        // matched parens. The non-greedy regex hands the closing paren
+        // to `trailing`, so we move closing parens back into the URL
+        // while it still has more `(` than `)`.
+        let openCount = (url.match(/\(/g) ?? []).length
+        let closeCount = (url.match(/\)/g) ?? []).length
+        while (openCount > closeCount && trailing.startsWith(')')) {
+            url += ')'
+            trailing = trailing.slice(1)
+            closeCount++
+        }
         const start = match.index
         if (start > lastIdx) out.push({ kind: 'text', value: text.slice(lastIdx, start) })
         out.push({ kind: 'link', value: url })

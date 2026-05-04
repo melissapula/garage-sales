@@ -119,7 +119,11 @@ export default defineNuxtConfig({
                   '/privacy': { swr: 86400 },
                   '/terms': { swr: 86400 },
                   '/': { swr: 3600 },
-                  '/sale/**': { swr: 600 },
+                  // No SWR on `/sale/**` — owner status updates
+                  // (running_late, winding_down, closed) need to land
+                  // near-real-time. A buyer following a stale link
+                  // would otherwise see a "closed" sale that the
+                  // system already considers gone.
                   '/share/**': { swr: 600 },
               }
             : {},
