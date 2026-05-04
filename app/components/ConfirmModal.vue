@@ -1,10 +1,20 @@
 <script setup lang="ts">
 const { pending, answer } = useConfirm()
 
+const dialogEl = ref<HTMLElement | null>(null)
+const isOpen = computed(() => !!pending.value)
+
+useFocusTrap(dialogEl, isOpen)
+
+// Escape closes (cancels). Enter is intentionally NOT handled globally
+// here — the previous version fired the destructive action on Enter
+// regardless of focus, which let stray keystrokes confirm a delete. Now
+// Enter only fires when the user has explicitly focused the Confirm
+// button (browser-default click activation), and the focus trap focuses
+// the Cancel button on open so Enter on first paint cancels.
 function onKeydown(ev: KeyboardEvent) {
     if (!pending.value) return
     if (ev.key === 'Escape') answer(false)
-    else if (ev.key === 'Enter') answer(true)
 }
 
 watch(pending, (p) => {
@@ -37,6 +47,7 @@ const confirmButtonClass = computed(() => {
 <template>
     <Teleport v-if="pending" to="body">
         <div
+            ref="dialogEl"
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             role="dialog"
             aria-modal="true"

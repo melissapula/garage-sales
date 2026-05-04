@@ -77,11 +77,15 @@ onBeforeUnmount(() => {
         document.removeEventListener('keydown', onKeydown)
     }
 })
+
+const dialogEl = ref<HTMLElement | null>(null)
+useFocusTrap(dialogEl, isOpen)
 </script>
 
 <template>
     <Teleport v-if="isOpen" to="body">
         <div
+            ref="dialogEl"
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
             role="dialog"
             aria-modal="true"
