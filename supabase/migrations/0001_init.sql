@@ -3,6 +3,9 @@
 -- RLS: anyone can read sales; only owner can mutate. Itineraries are owner-only.
 -- Cleanup: pg_cron job removes sales 7+ days past their end_date.
 
+-- pgcrypto for `gen_random_uuid()`. Hosted Supabase has it pre-installed,
+-- but a clean self-hosted target wouldn't, so declare the dependency.
+create extension if not exists pgcrypto;
 create extension if not exists pg_cron;
 
 -- ============================================================================

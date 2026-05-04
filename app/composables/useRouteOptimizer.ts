@@ -69,11 +69,14 @@ export async function optimizeRoute(
     url.searchParams.set('access_token', token)
 
     const requestUrl = url.toString()
+    // Strip the access_token before logging — anything that ends up in
+    // a console / log forwarder shouldn't carry the live Mapbox token.
+    const safeUrl = requestUrl.replace(/([?&])access_token=[^&]*/, '$1access_token=REDACTED')
     const res = await fetch(requestUrl)
     const json = await res.json().catch(() => null)
     if (!res.ok) {
         const msg = json?.message || json?.code || res.statusText || `HTTP ${res.status}`
-        console.error('[optimizeRoute] HTTP error', res.status, json, '\nRequest URL:', requestUrl)
+        console.error('[optimizeRoute] HTTP error', res.status, json, '\nRequest URL:', safeUrl)
         throw new Error(`Mapbox optimization failed: ${msg}`)
     }
     if (!json || (json.code && json.code !== 'Ok')) {
@@ -81,7 +84,7 @@ export async function optimizeRoute(
             '[optimizeRoute] Mapbox returned non-Ok\nresponse:',
             json,
             '\nrequest URL:',
-            requestUrl,
+            safeUrl,
         )
         const code = json?.code || 'Unknown'
         const message = json?.message || ''
