@@ -1,3 +1,12 @@
+/**
+ * Google Maps' "directions" deep-link (`/maps/dir/?api=1&waypoints=…`)
+ * accepts at most 9 waypoints between the origin and the destination.
+ * Apple Maps has no comparable cap. Both `/itineraries/[id]` and
+ * `/share/[id]` build these links — keep the cap in one place so a
+ * Google policy change is a one-line edit.
+ */
+export const GOOGLE_MAX_WAYPOINTS = 9
+
 export interface OptimizedLeg {
     distanceMeters: number
     durationSeconds: number

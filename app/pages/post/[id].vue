@@ -51,6 +51,12 @@ const error = ref<string | null>(null)
 const geocoding = ref(false)
 const saving = ref(false)
 
+// PhotoUploader stages storage deletes for already-saved photos and
+// only commits them after we successfully persist the form. That way a
+// user who removes a photo and then closes the page without saving
+// still has the photo when they come back.
+const photoUploaderRef = ref<{ commitPendingDeletes: () => Promise<void> } | null>(null)
+
 watch(addressInput, () => {
     if (resolved.value && resolved.value.address !== addressInput.value) {
         resolved.value = null
@@ -151,6 +157,9 @@ async function submit() {
         error.value = err.message
         return
     }
+    // Now that the new photos[] is persisted, commit any storage deletes
+    // the user staged via the photo uploader's "X" button.
+    await photoUploaderRef.value?.commitPendingDeletes()
     if (dupCheckFailed) {
         toast.info(
             "We couldn't verify you don't already have another sale at this address. Your edits are saved — please double-check 'My sales' for a duplicate.",
@@ -270,7 +279,7 @@ async function submit() {
 
             <div>
                 <label class="block text-sm font-medium text-gray-700">Photos (optional)</label>
-                <PhotoUploader v-model="photos" class="mt-1" />
+                <PhotoUploader ref="photoUploaderRef" v-model="photos" class="mt-1" />
             </div>
 
             <label class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100">

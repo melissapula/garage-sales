@@ -11,6 +11,15 @@ const emit = defineEmits<{
 
 const { uploadPhoto, deletePhotos } = useSalePhotos()
 
+// Snapshot of URLs that were already saved on the parent's record at
+// component mount. URLs in this set are "committed" and removing them
+// just stages a delete — the parent has to call commitPendingDeletes()
+// after a successful save (or revert them on cancel by keeping the
+// file). URLs uploaded *during this session* are not in this set, so
+// removing them deletes immediately — they were never saved anywhere.
+const initialUrls = new Set(props.modelValue)
+const pendingDeletes = ref<string[]>([])
+
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
 const error = ref<string | null>(null)
@@ -114,8 +123,32 @@ async function removeAt(idx: number) {
     const next = props.modelValue.slice()
     next.splice(idx, 1)
     emit('update:modelValue', next)
-    deletePhotos([url]).catch(() => {})
+    if (initialUrls.has(url)) {
+        // Existing photo on a saved record — defer the storage delete
+        // until the parent calls commitPendingDeletes() on submit
+        // success. If the user cancels, the file stays and the saved
+        // record's photos[] still resolves correctly.
+        pendingDeletes.value.push(url)
+    } else {
+        // Uploaded during this session and never saved — safe to drop
+        // from storage immediately.
+        deletePhotos([url]).catch(() => {})
+    }
 }
+
+/**
+ * Parent calls this on form-submit success: deletes from storage every
+ * URL the user removed during the edit. No-op when the staged list is
+ * empty (e.g., the user only added new photos).
+ */
+async function commitPendingDeletes() {
+    if (pendingDeletes.value.length === 0) return
+    const urls = pendingDeletes.value.slice()
+    pendingDeletes.value = []
+    await deletePhotos(urls).catch(() => {})
+}
+
+defineExpose({ commitPendingDeletes })
 
 function pick() {
     fileInput.value?.click()

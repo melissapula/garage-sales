@@ -80,7 +80,8 @@ useSeoMeta({
 })
 
 // Build maps export URLs from stop coords, no start point, end at last stop.
-const GOOGLE_MAX_WAYPOINTS = 9
+// `GOOGLE_MAX_WAYPOINTS` comes from useRouteOptimizer (auto-imported) so
+// it stays in sync with /itineraries/[id].
 const mapsLinks = computed(() => {
     const stops = data.value?.stops ?? []
     if (stops.length < 2) return null

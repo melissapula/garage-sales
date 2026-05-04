@@ -345,8 +345,8 @@ const visitOrderForMap = computed<number[] | null>(() =>
 // ============================================================================
 // Export to Maps apps
 // ============================================================================
-// Google Maps allows up to 9 waypoints (between origin and destination).
-const GOOGLE_MAX_WAYPOINTS = 9
+// `GOOGLE_MAX_WAYPOINTS` is exported from useRouteOptimizer so this and
+// /share/[id] share one source of truth for Google's deep-link cap.
 
 const mapsLinks = computed(() => {
     // Map exports only navigate to active stops — tombstones have no
@@ -441,12 +441,16 @@ async function togglePublic() {
         .from('routes')
         .update({ is_public: next })
         .eq('id', id)
-    togglingPublic.value = false
     if (error) {
+        togglingPublic.value = false
         toast.error(error.message)
         return
     }
-    data.value.route.is_public = next
+    // Refetch to pick up the canonical state instead of mutating
+    // data.value.route.is_public directly — that mutation would race
+    // with any concurrent refresh() and could be silently clobbered.
+    await refresh()
+    togglingPublic.value = false
     if (next) toast.success('Route is now public — share the link!')
 }
 

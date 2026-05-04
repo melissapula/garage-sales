@@ -86,17 +86,10 @@ async function hideConversation() {
 let channel: RealtimeChannel | null = null
 
 onMounted(async () => {
-    if (data.value) {
-        await markThreadRead(id)
-        // The layout's realtime channel decrements unread.count for each
-        // per-row UPDATE event that markThreadRead just produced — no
-        // need to count(*)-refresh here too. Doing both would race: a
-        // refresh response that landed mid-delta-stream would clobber the
-        // running tally.
-        scrollToBottom()
-    }
-
-    // Realtime: append incoming messages live, mark them read on arrival.
+    // Subscribe BEFORE marking-read so messages that arrive in the
+    // window between the initial fetch and now still land in the
+    // local list. (The layout channel handles the navbar badge delta
+    // for our mark-read UPDATE events — no need to refresh here.)
     channel = supabase
         .channel(`thread-${id}`)
         .on(
@@ -120,6 +113,11 @@ onMounted(async () => {
             },
         )
         .subscribe()
+
+    if (data.value) {
+        await markThreadRead(id)
+        scrollToBottom()
+    }
 })
 
 onBeforeUnmount(() => {
