@@ -30,32 +30,29 @@ export interface ThreadWithDetails extends MessageThread {
 
 export async function findOrCreateThread(
     otherUserId: string,
-    saleId: string | null,
+    saleId: string,
 ): Promise<string> {
     const supabase = useSupabaseClient()
     const user = useSupabaseUser()
     if (!user.value) throw new Error('Sign in to send a message.')
 
-    const me = user.value.id
-    const orFilter = `and(participant_one_id.eq.${me},participant_two_id.eq.${otherUserId}),and(participant_one_id.eq.${otherUserId},participant_two_id.eq.${me})`
-
-    let query = supabase.from('message_threads').select('id').or(orFilter).limit(1)
-    query = saleId ? query.eq('garage_sale_id', saleId) : query.is('garage_sale_id', null)
-
-    const { data: existing } = await query.maybeSingle()
-    if (existing) return existing.id
-
-    const { data, error } = await supabase
-        .from('message_threads')
-        .insert({
-            participant_one_id: me,
-            participant_two_id: otherUserId,
-            garage_sale_id: saleId,
-        })
-        .select('id')
-        .single()
+    // Server-side find-or-create (migration 0014). Encapsulates the
+    // contact_enabled / sale-owner checks plus auto-unhides the thread
+    // for the caller when they had previously hidden it — handling
+    // that client-side would create a duplicate thread because the
+    // SELECT RLS hides the existing one from the caller.
+    const { data, error } = await supabase.rpc('find_or_create_thread', {
+        p_other_user_id: otherUserId,
+        p_sale_id: saleId,
+    })
     if (error) throw error
-    return data.id
+    return data as string
+}
+
+export async function hideThread(threadId: string): Promise<void> {
+    const supabase = useSupabaseClient()
+    const { error } = await supabase.rpc('hide_thread', { p_thread_id: threadId })
+    if (error) throw error
 }
 
 export async function sendMessage(threadId: string, body: string): Promise<Message> {

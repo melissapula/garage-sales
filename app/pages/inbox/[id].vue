@@ -64,25 +64,23 @@ function scrollToBottom() {
     })
 }
 
-async function deleteThread() {
+async function hideConversation() {
     if (!data.value) return
     const ok = await confirm({
-        title: 'Delete this conversation?',
-        description: 'This cannot be undone.',
-        confirmText: 'Delete',
-        tone: 'danger',
+        title: 'Remove this conversation from your inbox?',
+        description:
+            "You won't see it anymore, but the other person still keeps their copy of the messages. If they reply later, the conversation comes back to your inbox.",
+        confirmText: 'Remove',
+        tone: 'default',
     })
     if (!ok) return
-    const { error: err } = await supabase
-        .from('message_threads')
-        .delete()
-        .eq('id', data.value.thread.id)
-    if (err) {
-        toast.error(err.message)
-        return
+    try {
+        await hideThread(data.value.thread.id)
+        toast.success('Conversation removed from your inbox.')
+        navigateTo('/inbox')
+    } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not remove conversation')
     }
-    toast.success('Conversation deleted.')
-    navigateTo('/inbox')
 }
 
 let channel: RealtimeChannel | null = null
@@ -174,10 +172,10 @@ function fmtTimestamp(iso: string): string {
                     </p>
                 </div>
                 <button
-                    class="text-xs text-red-600 hover:underline"
-                    @click="deleteThread"
+                    class="text-xs text-gray-600 hover:underline"
+                    @click="hideConversation"
                 >
-                    Delete
+                    Remove from inbox
                 </button>
             </header>
 
