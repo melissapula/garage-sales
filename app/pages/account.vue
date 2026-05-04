@@ -76,13 +76,20 @@ const deleteError = ref<string | null>(null)
 const canDelete = computed(() => deleteInput.value.trim().toUpperCase() === 'DELETE')
 
 async function purgeUserPhotos(userId: string) {
-    // List + remove the entire <userId>/ folder in sale-photos.
-    const { data: files } = await supabase.storage
-        .from('sale-photos')
-        .list(userId, { limit: 1000 })
-    if (!files || files.length === 0) return
-    const paths = files.map((f) => `${userId}/${f.name}`)
-    await supabase.storage.from('sale-photos').remove(paths)
+    // List + remove the entire <userId>/ folder in sale-photos. The
+    // single-page list cap is 1000, so loop until a partial / empty page
+    // confirms we've drained the folder. Otherwise a power user with
+    // >1000 photos would leave orphans.
+    const PAGE = 1000
+    while (true) {
+        const { data: files } = await supabase.storage
+            .from('sale-photos')
+            .list(userId, { limit: PAGE })
+        if (!files || files.length === 0) return
+        const paths = files.map((f) => `${userId}/${f.name}`)
+        await supabase.storage.from('sale-photos').remove(paths)
+        if (files.length < PAGE) return
+    }
 }
 
 function cancelDelete() {

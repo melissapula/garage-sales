@@ -4,7 +4,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 
-const { data: threads, refresh } = await useAsyncData(
+const { data: threads, refresh, pending } = await useAsyncData(
     'inbox-threads',
     () => fetchInbox(),
     { watch: [user] },
@@ -68,7 +68,22 @@ function fmtRelative(iso: string): string {
             Conversations with other users about garage sales.
         </p>
 
-        <ul v-if="threads && threads.length" class="mt-6 space-y-2">
+        <!-- Skeleton during a refetch (e.g. user state change). The first
+             paint is server-rendered with data already loaded, so this
+             only shows when there's no cached threads list yet. -->
+        <div v-if="pending && !threads?.length" class="mt-6 space-y-2">
+            <div
+                v-for="i in 3"
+                :key="i"
+                class="rounded-xl bg-white p-4 ring-1 ring-orange-100"
+            >
+                <div class="h-4 w-1/3 animate-pulse rounded bg-gray-200" />
+                <div class="mt-2 h-3 w-1/2 animate-pulse rounded bg-gray-200" />
+                <div class="mt-2 h-3 w-2/3 animate-pulse rounded bg-gray-200" />
+            </div>
+        </div>
+
+        <ul v-else-if="threads && threads.length" class="mt-6 space-y-2">
             <li v-for="t in threads" :key="t.id">
                 <NuxtLink
                     :to="`/inbox/${t.id}`"
