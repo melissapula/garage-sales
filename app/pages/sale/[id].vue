@@ -15,7 +15,12 @@ const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
         .eq('id', id)
         .maybeSingle()
     if (err) throw err
-    return data as GarageSale | null
+    if (!data) {
+        // Real 404 so search engines don't index "sale not found" cards
+        // as 200 OK content, and so the styled error page renders.
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+    }
+    return data as GarageSale
 })
 
 const isOwner = computed(() => sale.value && user.value && sale.value.user_id === user.value.id)

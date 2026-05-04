@@ -12,7 +12,9 @@ const { data } = await useAsyncData(`share-${id}`, async () => {
         .eq('id', id)
         .maybeSingle()
     if (rErr) throw rErr
-    if (!r || !r.is_public) return null
+    if (!r || !r.is_public) {
+        throw createError({ statusCode: 404, statusMessage: 'Route not found' })
+    }
 
     const { data: stops, error: sErr } = await supabase
         .from('route_stops')
@@ -59,7 +61,10 @@ useSeoMeta({
         data.value
             ? `${data.value.stops.length} stops on ${dateLabel.value}, shared by ${data.value.ownerName}.`
             : '',
+    ogImage: () => `${config.public.siteUrl}/og-image.png`,
     ogUrl: () => `${config.public.siteUrl}/share/${id}`,
+    ogType: 'website',
+    twitterCard: 'summary_large_image',
 })
 
 // Build maps export URLs from stop coords, no start point, end at last stop.

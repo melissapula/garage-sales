@@ -64,33 +64,48 @@ async function onLetsGo(saleId: string) {
 }
 
 // Center the map on the user's location on first visit, with the choice
-// cached so we never re-prompt (the on-map "📍" GeolocateControl button is
-// always available for an explicit re-center).
+// cached so we don't re-prompt every page load. The on-map "📍"
+// GeolocateControl button is always available for an explicit re-center.
+//
+// The cache has a TTL so users who change their mind (or move cities)
+// aren't stuck forever:
+//   - granted: keep coords for 7 days, then re-ask
+//   - denied: keep the "no" for 24h, then re-ask
 const LOCATION_KEY = 'gst:user-location'
-type CachedLocation = { asked: true; granted: true; lng: number; lat: number; ts: number }
+const GRANTED_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const DENIED_TTL_MS = 24 * 60 * 60 * 1000
+type CachedLocation =
+    | { asked: true; granted: true; lng: number; lat: number; ts: number }
     | { asked: true; granted: false; ts: number }
 const userCenter = ref<[number, number] | null>(null)
 
-if (import.meta.client) {
+function readLocationCache(): CachedLocation | null {
+    if (typeof localStorage === 'undefined') return null
     try {
         const raw = localStorage.getItem(LOCATION_KEY)
-        if (raw) {
-            const cached = JSON.parse(raw) as CachedLocation
-            if (cached.granted) userCenter.value = [cached.lng, cached.lat]
+        if (!raw) return null
+        const cached = JSON.parse(raw) as CachedLocation
+        const age = Date.now() - (cached.ts ?? 0)
+        const ttl = cached.granted ? GRANTED_TTL_MS : DENIED_TTL_MS
+        if (age > ttl) {
+            // Stale — drop it so we re-prompt and refresh the coords.
+            localStorage.removeItem(LOCATION_KEY)
+            return null
         }
+        return cached
     } catch {
-        // localStorage unavailable (private mode, etc.) — fall back to default.
+        return null
     }
+}
+
+if (import.meta.client) {
+    const cached = readLocationCache()
+    if (cached?.granted) userCenter.value = [cached.lng, cached.lat]
 }
 
 onMounted(async () => {
     if (!import.meta.client) return
-    let asked = false
-    try {
-        const raw = localStorage.getItem(LOCATION_KEY)
-        if (raw) asked = (JSON.parse(raw) as CachedLocation).asked === true
-    } catch { /* ignore */ }
-    if (asked) return
+    if (readLocationCache()) return // already asked recently — skip prompt
 
     try {
         const pos = await getCurrentPosition()

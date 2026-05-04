@@ -32,7 +32,13 @@ function clearAvailableSelection() {
 // ============================================================================
 // Data
 // ============================================================================
-const { data, refresh } = await useAsyncData(`route-${id}`, () => fetchRouteWithStops(id))
+const { data, refresh } = await useAsyncData(`route-${id}`, async () => {
+    const result = await fetchRouteWithStops(id)
+    if (!result) {
+        throw createError({ statusCode: 404, statusMessage: 'Route not found' })
+    }
+    return result
+})
 
 const { data: savedSales, refresh: refreshSaved } = await useAsyncData(
     'route-saved-sales',
