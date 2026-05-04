@@ -297,12 +297,21 @@ watch(() => props.hoveredId, () => {
     if (props.selectedId) return
     syncFromProps()
 })
-watch(() => props.sales, () => {
-    if (map?.loaded()) {
-        renderMarkers()
-        syncFromProps()
-    }
-}, { deep: true })
+// Rebuild markers only when the *set* of pinned sales actually changes
+// (add/remove/move). Watching `props.sales` with `deep: true` would tear
+// down and re-create every Mapbox marker — and kill the user's hover
+// state mid-interaction — on any property of any sale changing (e.g. a
+// realtime status update). The popup HTML reads `props.sales.find(...)`
+// each time it opens, so non-marker fields stay live without a rebuild.
+watch(
+    () => props.sales.map((s) => `${s.id}:${s.lat}:${s.lng}`).join('|'),
+    () => {
+        if (map?.loaded()) {
+            renderMarkers()
+            syncFromProps()
+        }
+    },
+)
 
 // If the initial center resolves after mount (e.g., the user grants the
 // browser geolocation prompt asynchronously), fly the map there. We don't
