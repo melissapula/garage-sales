@@ -1,6 +1,6 @@
-# Bemidji Garage Sales
+# Garage Sale Tracker
 
-A garage sale map and route-planning app for Bemidji, MN and the surrounding area. Anyone can browse the map; signed-in users can post sales, save the ones they want to visit, build day-routes through them, and chat with sellers.
+A garage sale map and route-planning app — originally built for Bemidji, MN, but open to listings anywhere. Anyone can browse the map; signed-in users can post sales, save the ones they want to visit, build day-routes through them, and chat with sellers.
 
 ## Stack
 
@@ -62,8 +62,9 @@ Nuxt's Nitro engine auto-detects Vercel — no `vercel.json` needed.
 `/browse` — public, three-column desktop layout (filters | list | map), tabbed on mobile.
 
 - **Filters:** day (auto-built from data) and time bucket (morning < noon, afternoon noon–5, evening 5pm+).
-- **Map:** Mapbox GL JS centered on Bemidji. Pins colored green (today) or yellow (upcoming). Past sales are filtered out.
+- **Map:** Mapbox GL JS. Pins colored green (today) or yellow (upcoming). Past sales are filtered out. On the visitor's first time on the page, the browser prompts for location — if granted, the map centers on their coordinates; otherwise it falls back to Bemidji. The choice is cached in `localStorage` (`gst:user-location`) so we never re-prompt; the on-map "📍" button stays available for explicit re-centering.
 - **Sync:** hovering a pin shows a transient popover; clicking pins it as a persistent popover (with close X) and replaces the middle list with a detail card. Click outside to clear.
+- **Mobile tabs:** list / map / filters tabs are mutually exclusive — tapping any tab clears the selected sale, so list shows the full filtered list and map shows all filtered pins. Selecting a sale stacks the detail card above the map by default.
 - **"Let's go!" button** on cards and popovers adds the sale to the user's saved-sales wishlist.
 
 ### Posting a sale

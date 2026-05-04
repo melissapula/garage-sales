@@ -7,6 +7,7 @@ const props = defineProps<{
     sales: GarageSale[]
     selectedId: string | null
     hoveredId: string | null
+    initialCenter?: [number, number] | null
 }>()
 
 const emit = defineEmits<{
@@ -202,7 +203,7 @@ onMounted(async () => {
     map = new mapboxgl.Map({
         container: mapEl.value,
         style: 'mapbox://styles/mapbox/streets-v12',
-        center: BEMIDJI,
+        center: props.initialCenter ?? BEMIDJI,
         zoom: 11,
     })
     map.addControl(new mapboxgl.NavigationControl(), 'top-right')
@@ -302,6 +303,15 @@ watch(() => props.sales, () => {
         syncFromProps()
     }
 }, { deep: true })
+
+// If the initial center resolves after mount (e.g., the user grants the
+// browser geolocation prompt asynchronously), fly the map there. We don't
+// fly when the prop is cleared back to null — that only happens on a
+// browser without a cached location, where the map already shows Bemidji.
+watch(() => props.initialCenter, (next) => {
+    if (!next || !map) return
+    map.flyTo({ center: next, zoom: Math.max(map.getZoom(), 11), essential: true })
+})
 
 watch(user, () => {
     useSavedSales().refresh()

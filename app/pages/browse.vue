@@ -4,6 +4,7 @@ import {
     applyFilters,
     emptyFilters,
 } from '~/utils/filters'
+import { getCurrentPosition } from '~/composables/useRouteOptimizer'
 
 const { savedSet, save, refresh: refreshSaved } = useSavedSales()
 const user = useSupabaseUser()
@@ -61,6 +62,46 @@ async function onLetsGo(saleId: string) {
     }
     await save(saleId)
 }
+
+// Center the map on the user's location on first visit, with the choice
+// cached so we never re-prompt (the on-map "📍" GeolocateControl button is
+// always available for an explicit re-center).
+const LOCATION_KEY = 'gst:user-location'
+type CachedLocation = { asked: true; granted: true; lng: number; lat: number; ts: number }
+    | { asked: true; granted: false; ts: number }
+const userCenter = ref<[number, number] | null>(null)
+
+if (import.meta.client) {
+    try {
+        const raw = localStorage.getItem(LOCATION_KEY)
+        if (raw) {
+            const cached = JSON.parse(raw) as CachedLocation
+            if (cached.granted) userCenter.value = [cached.lng, cached.lat]
+        }
+    } catch {
+        // localStorage unavailable (private mode, etc.) — fall back to default.
+    }
+}
+
+onMounted(async () => {
+    if (!import.meta.client) return
+    let asked = false
+    try {
+        const raw = localStorage.getItem(LOCATION_KEY)
+        if (raw) asked = (JSON.parse(raw) as CachedLocation).asked === true
+    } catch { /* ignore */ }
+    if (asked) return
+
+    try {
+        const pos = await getCurrentPosition()
+        userCenter.value = [pos.lng, pos.lat]
+        const entry: CachedLocation = { asked: true, granted: true, lng: pos.lng, lat: pos.lat, ts: Date.now() }
+        localStorage.setItem(LOCATION_KEY, JSON.stringify(entry))
+    } catch {
+        const entry: CachedLocation = { asked: true, granted: false, ts: Date.now() }
+        try { localStorage.setItem(LOCATION_KEY, JSON.stringify(entry)) } catch { /* ignore */ }
+    }
+})
 
 // Mobile tab state
 type MobileTab = 'list' | 'map' | 'filters'
@@ -212,6 +253,7 @@ const upcomingCount = computed(
                         :sales="filteredSales"
                         :selected-id="selectedId"
                         :hovered-id="hoveredId"
+                        :initial-center="userCenter"
                         @select="onSelect"
                         @hover="onHover"
                         @clear="clearSelection"

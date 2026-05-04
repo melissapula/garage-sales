@@ -1,13 +1,13 @@
 # Bemidji Garage Sales — Project Context for Claude
 
 > Read this file at the start of every session to get fully up to speed.
-> Last updated: 2026-05-01
+> Last updated: 2026-05-04
 
 ---
 
 ## What is this app?
 
-A community garage sale platform for Bemidji, MN and the surrounding area. Locals post their sales, anyone browses them on a map, and signed-in users build daily driving routes through the ones they want to hit.
+A community garage sale platform — originally built for Bemidji, MN and the surrounding area, but as of 2026-05-04 Missa is opening it up to anyone, anywhere. The Bemidji branding stays for now (the repo, app name, and proximity-biased geocoding default), but listings outside the Bemidji area are welcome and the product is being framed for a wider audience. Locals post their sales, anyone browses them on a map, and signed-in users build daily driving routes through the ones they want to hit.
 
 It's the sister project to Missa's larger app, **Frula Homes** (lives at `C:/Users/missa/fsbo-platform/`). Same general stack (Nuxt 4 + Supabase + Mapbox + Tailwind, mobile-first), different visual identity, much smaller surface area.
 
@@ -128,6 +128,9 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 - **Realtime:** `/inbox/[id]` subscribes to message INSERTs filtered to its `thread_id` and appends them live. `/inbox` subscribes to all message INSERTs (RLS-filtered) and refreshes. The default layout subscribes to message inserts/updates and refreshes the navbar badge. Channels are removed on unmount.
 - **Owner status:** `garage_sales.status` is one of `open` (default), `running_late`, `winding_down`, `closed`. Closed sales are filtered out of `/browse` (`fetchActiveSales` adds `.neq('status', 'closed')`) but still visible to the owner on `/my-sales`. The owner sets status from quick-tap pills on `/sale/[id]`. Banner shows on detail and inline status badge shows on cards/popovers.
 - **Photo lightbox:** `PhotoLightbox.vue` is a teleport-to-body modal with arrow-key + swipe + Esc + click-outside close. Fixed body overflow while open.
+- **Browse map auto-centers on user location.** On first visit to `/browse`, the page prompts for `navigator.geolocation` and, if granted, centers the map on the user's coordinates. The result (granted+coords or denied) is cached in `localStorage` under the key `gst:user-location` so we never re-prompt; users can opt in later via the on-map "📍" `GeolocateControl` button. If the user moves cities, they need to either tap that button or clear browser data — there's no TTL on the cache yet.
+- **Mobile browse tabs are mutually exclusive.** On `/browse` mobile, tapping list/map/filters clears any selected sale (via `clearSelection`), so the list tab shows the full filtered list and the map tab shows all the filtered pins. Selecting a sale (from list or pin) shows the detail card stacked above the map by default.
+- **Mapbox container resize.** `BrowseMap.vue` runs a `ResizeObserver` on its container and calls `map.resize()` on every change. Mapbox's built-in `trackResize` only listens to *window* resizes, so without this the canvas would freeze at its initial size whenever internal layout shifts (mobile stacked detail+map, tab swaps) grew the container — pins past the original size would float over empty cream.
 
 ### Environment variables (in `.env`, gitignored)
 
@@ -167,7 +170,8 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 
 ## Recent decisions to remember
 
-- **Bemidji-only proximity bias** for geocoding (Mapbox `proximity=-94.8826,47.4716`). Don't let this leak into sale data — addresses are still real US addresses, just biased toward Bemidji results when ambiguous.
+- **App scope is now nationwide.** As of 2026-05-04 Missa decided to open the app to anyone, not just Bemidji. The marketing copy and CLAUDE.md tagline still mention Bemidji, but don't reject or warn about listings far from there. See `~/.claude/projects/C--Users-missa-garage-sales/memory/project_app_scope_anyone.md`.
+- **Bemidji-only proximity bias** for geocoding (Mapbox `proximity=-94.8826,47.4716`). Don't let this leak into sale data — addresses are still real US addresses, just biased toward Bemidji results when ambiguous. Now that the app is open nationwide, this may produce off-target geocodes for users elsewhere; revisit if Missa flags it.
 - **Round-trip is the default** for Optimize Order because Mapbox v1 doesn't support open-end optimization. The "Return to start" checkbox lets users opt out (uses Directions API one-way path).
 - **30 min per stop** is the timeline assumption. Hard-coded for now; could become user-configurable if asked.
 - **"Let's go!" wording** for the save-to-wishlist button — Missa's preference, kept verbatim across cards, popovers, and the detail page.
