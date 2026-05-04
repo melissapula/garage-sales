@@ -24,21 +24,29 @@ function teardownChannel() {
 function subscribeUnread() {
     teardownChannel()
     if (!user.value) return
+    const me = user.value.id
     channel = supabase
         .channel('layout-unread')
         .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'messages' },
-            () => {
-                unread.refresh()
+            (payload) => {
+                // Brand-new messages are unread by definition; only count
+                // ones the other person sent. Avoids a count(*) refetch.
+                const m = payload.new as { sender_id: string }
+                if (m.sender_id !== me) unread.incrementUnread()
             },
         )
         .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'messages' },
-            () => {
-                // Mark-read updates change the unread count.
-                unread.refresh()
+            (payload) => {
+                // Post-RLS-hardening (migration 0012) the only legal UPDATE
+                // on messages is the recipient flipping `read_at`. Each
+                // such event is exactly one unread → read transition for a
+                // message we received. No need to refetch.
+                const m = payload.new as { sender_id: string }
+                if (m.sender_id !== me) unread.decrementUnread()
             },
         )
         .subscribe()

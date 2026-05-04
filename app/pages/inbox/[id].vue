@@ -8,7 +8,6 @@ const user = useSupabaseUser()
 
 const id = route.params.id as string
 
-const unread = useUnreadCount()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -73,7 +72,11 @@ let channel: RealtimeChannel | null = null
 onMounted(async () => {
     if (data.value) {
         await markThreadRead(id)
-        unread.refresh()
+        // The layout's realtime channel decrements unread.count for each
+        // per-row UPDATE event that markThreadRead just produced — no
+        // need to count(*)-refresh here too. Doing both would race: a
+        // refresh response that landed mid-delta-stream would clobber the
+        // running tally.
         scrollToBottom()
     }
 
@@ -96,7 +99,7 @@ onMounted(async () => {
                 scrollToBottom()
                 if (msg.sender_id !== user.value?.id) {
                     await markThreadRead(id)
-                    unread.refresh()
+                    // Layout channel handles the badge delta.
                 }
             },
         )

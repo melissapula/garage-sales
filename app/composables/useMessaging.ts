@@ -200,5 +200,14 @@ export function useUnreadCount() {
         if (!error && c !== null) count.value = c
     }
 
-    return { count, refresh }
+    // Realtime handlers can update the badge without a DB round-trip when
+    // we already know the delta — see `app/layouts/default.vue`.
+    function incrementUnread() {
+        count.value = count.value + 1
+    }
+    function decrementUnread() {
+        count.value = Math.max(0, count.value - 1)
+    }
+
+    return { count, refresh, incrementUnread, decrementUnread }
 }

@@ -22,7 +22,10 @@ onMounted(() => {
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'messages' },
             () => {
-                refreshAll()
+                // Refetch the threads list so a brand-new conversation
+                // shows up. The navbar unread badge is updated via deltas
+                // in the layout channel, so we don't refetch the count.
+                refresh()
             },
         )
         .on(
