@@ -108,7 +108,7 @@ async function onLetsGo() {
             v-if="sale.description"
             class="mt-4 whitespace-pre-line rounded-lg bg-cream p-3 text-sm text-gray-800"
         >
-            {{ sale.description }}
+            <AutoLinkText :text="sale.description" />
         </p>
 
         <div class="mt-5 flex flex-wrap gap-2">

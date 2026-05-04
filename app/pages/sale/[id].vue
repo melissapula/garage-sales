@@ -231,7 +231,7 @@ async function deleteSale() {
                 v-if="sale.description"
                 class="mt-6 whitespace-pre-line rounded-xl bg-white p-4 text-gray-800 ring-1 ring-orange-100"
             >
-                {{ sale.description }}
+                <AutoLinkText :text="sale.description" />
             </p>
 
             <div class="mt-8 flex flex-wrap gap-3">

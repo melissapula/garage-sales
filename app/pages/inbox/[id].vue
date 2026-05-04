@@ -21,6 +21,24 @@ const draft = ref('')
 const sending = ref(false)
 const error = ref<string | null>(null)
 
+// On mobile virtual keyboards, Enter is typically a Send/Done key, not a
+// newline key — auto-submitting on Enter there means a half-typed message
+// goes out the moment a user reaches for a line break. Enter-to-send is
+// kept on devices with a real keyboard (hover + fine pointer), and on
+// mobile Enter just inserts a newline as the keyboard expects.
+const enterSubmits = ref(false)
+onMounted(() => {
+    enterSubmits.value = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+})
+
+function onTextareaKeydown(ev: KeyboardEvent) {
+    if (ev.key !== 'Enter') return
+    if (!enterSubmits.value) return
+    if (ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return
+    ev.preventDefault()
+    send()
+}
+
 async function send() {
     if (!data.value) return
     error.value = null
@@ -189,7 +207,16 @@ function fmtTimestamp(iso: string): string {
                                     : 'bg-orange-50 text-gray-900'
                             "
                         >
-                            <p class="whitespace-pre-line break-words text-sm">{{ m.body }}</p>
+                            <p class="whitespace-pre-line break-words text-sm">
+                                <AutoLinkText
+                                    :text="m.body"
+                                    :link-class="
+                                        m.sender_id === user?.id
+                                            ? 'break-words text-white underline hover:no-underline'
+                                            : 'break-words text-sky-700 hover:underline'
+                                    "
+                                />
+                            </p>
                             <p
                                 class="mt-1 text-[10px]"
                                 :class="
@@ -214,7 +241,7 @@ function fmtTimestamp(iso: string): string {
                     placeholder="Type a message…"
                     class="input flex-1 !min-h-[60px]"
                     :disabled="sending"
-                    @keydown.enter.exact.prevent="send"
+                    @keydown="onTextareaKeydown"
                 />
                 <button
                     type="submit"
