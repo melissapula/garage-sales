@@ -2,6 +2,7 @@
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()
+const toast = useToast()
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -81,8 +82,11 @@ async function submit() {
     saving.value = true
 
     // Reject if another active sale at the same address overlaps these dates.
+    // The retry helper tries twice; if both attempts fail we still post,
+    // but flag the user so they can sanity-check the map.
+    let dupCheckFailed = false
     try {
-        const conflict = await findOverlappingSale(
+        const conflict = await findOverlappingSaleWithRetry(
             resolved.value!.lat,
             resolved.value!.lng,
             startDate.value,
@@ -97,7 +101,7 @@ async function submit() {
             return
         }
     } catch {
-        // If the dup-check call itself fails, don't block — fall through.
+        dupCheckFailed = true
     }
 
     const { data, error: err } = await supabase
@@ -122,6 +126,11 @@ async function submit() {
     if (err) {
         error.value = err.message
         return
+    }
+    if (dupCheckFailed) {
+        toast.info(
+            "We couldn't verify another sale wasn't already at this address. Your post is live — please double-check the map and contact us if you spot a duplicate.",
+        )
     }
     router.push(`/sale/${data.id}`)
 }

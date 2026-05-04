@@ -74,3 +74,33 @@ export async function findOverlappingSale(
     if (error) throw error
     return (data?.[0] as OverlapConflict | undefined) ?? null
 }
+
+/**
+ * Same as `findOverlappingSale`, but retries once after a short delay if
+ * the underlying request fails (e.g. transient network blip). The post
+ * forms use this so they can distinguish "no conflict" from "we couldn't
+ * tell", and warn the user in the latter case rather than silently
+ * posting a possible duplicate.
+ */
+export async function findOverlappingSaleWithRetry(
+    lat: number,
+    lng: number,
+    startDate: string,
+    endDate: string,
+    excludeId?: string,
+): Promise<OverlapConflict | null> {
+    try {
+        return await findOverlappingSale(lat, lng, startDate, endDate, excludeId)
+    } catch (firstError) {
+        await new Promise((r) => setTimeout(r, 300))
+        try {
+            return await findOverlappingSale(lat, lng, startDate, endDate, excludeId)
+        } catch (secondError) {
+            // Re-throw the second error so the caller can show a soft
+            // notice. We log both attempts to ease debugging.
+            console.warn('Overlap check failed (1st attempt):', firstError)
+            console.warn('Overlap check failed (retry):', secondError)
+            throw secondError
+        }
+    }
+}
