@@ -51,9 +51,14 @@ export async function fetchRouteWithStops(id: string) {
 
 export async function fetchSavedSalesWithDetails() {
     const supabase = useSupabaseClient()
+    const today = new Date().toISOString().slice(0, 10)
     const { data, error } = await supabase
         .from('saved_sales')
-        .select('garage_sale_id, created_at, sale:garage_sales(*)')
+        .select('garage_sale_id, created_at, sale:garage_sales!inner(*)')
+        // Drop saved sales whose date already passed — the itineraries
+        // pages filter them client-side anyway, but excluding them here
+        // saves wire bytes and avoids the join when the sale is gone.
+        .gte('garage_sales.end_date', today)
         .order('created_at', { ascending: false })
     if (error) throw error
     return (data ?? []) as unknown as Array<{

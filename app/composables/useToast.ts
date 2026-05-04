@@ -6,6 +6,10 @@ export interface Toast {
     tone: ToastTone
 }
 
+// Monotonic counter — two toasts pushed in the same millisecond used to
+// risk an ID collision under the previous Date.now()+Math.random() scheme.
+let nextToastId = 1
+
 export function useToast() {
     const toasts = useState<Toast[]>('app-toasts', () => [])
 
@@ -14,7 +18,7 @@ export function useToast() {
     }
 
     function push(message: string, tone: ToastTone = 'info', timeoutMs = 4500) {
-        const id = Date.now() + Math.random()
+        const id = nextToastId++
         toasts.value = [...toasts.value, { id, message, tone }]
         if (timeoutMs > 0) {
             setTimeout(() => dismiss(id), timeoutMs)

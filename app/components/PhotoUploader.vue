@@ -39,18 +39,38 @@ async function processFiles(files: File[]) {
 
     uploading.value = true
     try {
-        const newUrls: string[] = []
-        for (const file of toUpload) {
-            if (!file.type.startsWith('image/')) {
-                error.value = `${file.name} isn't an image — skipped.`
-                continue
-            }
-            const url = await uploadPhoto(file)
-            newUrls.push(url)
+        // Separate non-image files first so they don't poison the upload
+        // pool; track them for a single combined error message.
+        const validFiles: File[] = []
+        const messages: string[] = []
+        for (const f of toUpload) {
+            if (f.type.startsWith('image/')) validFiles.push(f)
+            else messages.push(`${f.name} isn't an image — skipped.`)
         }
+
+        // Upload in parallel with a small concurrency cap — Supabase Storage
+        // handles concurrent puts fine, but we don't want to slam slow
+        // connections with 10-at-once. Use allSettled so one failure
+        // doesn't kill the rest of the batch.
+        const concurrency = 3
+        const newUrls: string[] = []
+        for (let i = 0; i < validFiles.length; i += concurrency) {
+            const chunk = validFiles.slice(i, i + concurrency)
+            const results = await Promise.allSettled(chunk.map((f) => uploadPhoto(f)))
+            results.forEach((r, j) => {
+                if (r.status === 'fulfilled') {
+                    newUrls.push(r.value)
+                } else {
+                    const why = r.reason instanceof Error ? r.reason.message : 'upload failed'
+                    messages.push(`${chunk[j]!.name}: ${why}`)
+                }
+            })
+        }
+
         if (newUrls.length) emit('update:modelValue', [...props.modelValue, ...newUrls])
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Upload failed'
+        if (messages.length) {
+            error.value = (error.value ? error.value + ' ' : '') + messages.join(' ')
+        }
     } finally {
         uploading.value = false
         if (fileInput.value) fileInput.value.value = ''
