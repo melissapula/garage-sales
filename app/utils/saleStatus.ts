@@ -6,7 +6,7 @@ export interface SaleDates {
 }
 
 export function saleStatus(sale: SaleDates, today = new Date()): SaleStatus {
-    const todayStr = today.toISOString().slice(0, 10)
+    const todayStr = toLocalISO(today)
     if (sale.end_date < todayStr) return 'past'
     if (sale.start_date > todayStr) return 'upcoming'
     return 'active'

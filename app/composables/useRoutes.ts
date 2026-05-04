@@ -51,7 +51,7 @@ export async function fetchRouteWithStops(id: string) {
 
 export async function fetchSavedSalesWithDetails() {
     const supabase = useSupabaseClient()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayLocalISO()
     const { data, error } = await supabase
         .from('saved_sales')
         .select('garage_sale_id, created_at, sale:garage_sales!inner(*)')

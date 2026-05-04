@@ -7,7 +7,7 @@ const { confirm } = useConfirm()
 
 const { unsave, refresh: refreshSavedIds } = useSavedSales()
 
-const today = new Date().toISOString().slice(0, 10)
+const today = todayLocalISO()
 
 const { data: savedSales, refresh: refreshSaved } = await useAsyncData('saved-sales-detail', () =>
     fetchSavedSalesWithDetails(),

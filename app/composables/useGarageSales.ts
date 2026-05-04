@@ -20,7 +20,7 @@ export interface GarageSale {
 
 export async function fetchActiveSales() {
     const supabase = useSupabaseClient()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayLocalISO()
     const { data, error } = await supabase
         .from('garage_sales')
         .select('*')
@@ -40,16 +40,23 @@ export interface OverlapConflict {
 }
 
 /**
- * Find an existing active sale at the same coordinates whose date range
- * overlaps the proposed [startDate, endDate]. Returns null if there's no
- * conflict.
+ * Find an existing active sale by THE SAME USER at the same coordinates
+ * whose date range overlaps the proposed [startDate, endDate]. Returns
+ * null if there's no conflict.
  *
  * Lat/lng are matched within ±0.0001° (~11m) so identical Mapbox geocodes
  * for the same address still match each other even with tiny float drift.
  *
+ * Scoping to the same user is intentional: condo neighbors, multi-family
+ * sales on a shared cul-de-sac, and flea-market-style multi-vendor events
+ * all geocode to within the eps and would otherwise hard-block a totally
+ * legitimate post. Same-user duplicate detection still catches the real
+ * "I accidentally posted twice" case.
+ *
  * `excludeId` lets the edit form skip its own existing row.
  */
 export async function findOverlappingSale(
+    userId: string,
     lat: number,
     lng: number,
     startDate: string,
@@ -61,6 +68,7 @@ export async function findOverlappingSale(
     let q = supabase
         .from('garage_sales')
         .select('id, title, start_date, end_date, address')
+        .eq('user_id', userId)
         .gte('lat', lat - eps)
         .lte('lat', lat + eps)
         .gte('lng', lng - eps)
@@ -83,6 +91,7 @@ export async function findOverlappingSale(
  * posting a possible duplicate.
  */
 export async function findOverlappingSaleWithRetry(
+    userId: string,
     lat: number,
     lng: number,
     startDate: string,
@@ -90,11 +99,11 @@ export async function findOverlappingSaleWithRetry(
     excludeId?: string,
 ): Promise<OverlapConflict | null> {
     try {
-        return await findOverlappingSale(lat, lng, startDate, endDate, excludeId)
+        return await findOverlappingSale(userId, lat, lng, startDate, endDate, excludeId)
     } catch (firstError) {
         await new Promise((r) => setTimeout(r, 300))
         try {
-            return await findOverlappingSale(lat, lng, startDate, endDate, excludeId)
+            return await findOverlappingSale(userId, lat, lng, startDate, endDate, excludeId)
         } catch (secondError) {
             // Re-throw the second error so the caller can show a soft
             // notice. We log both attempts to ease debugging.

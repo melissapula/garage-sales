@@ -25,19 +25,19 @@ const availableDays = computed(() => {
         const start = new Date(s.start_date + 'T00:00:00')
         const end = new Date(s.end_date + 'T00:00:00')
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            set.add(d.toISOString().slice(0, 10))
+            set.add(toLocalISO(d))
         }
     }
     return [...set].sort()
 })
 
 function dayLabel(iso: string): string {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayLocalISO()
     const d = new Date(iso + 'T00:00:00')
     if (iso === today) return 'Today'
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    if (iso === tomorrow.toISOString().slice(0, 10)) return 'Tomorrow'
+    if (iso === toLocalISO(tomorrow)) return 'Tomorrow'
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
