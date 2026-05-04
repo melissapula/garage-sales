@@ -1,7 +1,7 @@
 # Bemidji Garage Sales — Project Context for Claude
 
 > Read this file at the start of every session to get fully up to speed.
-> Last updated: 2026-05-04 (after audit-driven hardening + per-user thread hide)
+> Last updated: 2026-05-04 (after round-2 audit + soft-delete + expired styling)
 
 ---
 
@@ -55,18 +55,20 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 | Table             | Purpose                                                                 | Notes                                                                                     |
 | ----------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `garage_sales`    | The core listing.                                                       | `photos text[]`, `contact_enabled boolean`, `status text` (open/running_late/winding_down/closed), dates/times, lat/lng. RLS: public read. |
+| `garage_sales`    | The core listing.                                                       | `photos text[]`, `contact_enabled boolean`, `status text` (open/running_late/winding_down/closed), `deleted_at timestamptz` (soft-delete tombstone), dates/times, lat/lng. RLS: public read. |
 | `saved_sales`     | Per-user wishlist (the "Let's go!" list).                               | PK `(user_id, garage_sale_id)`. RLS: owner-only.                                          |
 | `routes`          | A planned outing on a specific day.                                     | `route_date date not null`. RLS: owner-only.                                              |
 | `route_stops`     | Ordered sales within a route.                                           | PK `(route_id, garage_sale_id)`, `position int`. RLS: via parent route.                   |
 | `profiles`        | One row per auth user with a `display_name`.                            | Auto-created via trigger on `auth.users` insert. RLS: public read, owner-only write.       |
 | `message_threads` | A conversation between two users, optionally about a sale.              | `participant_one_id`, `participant_two_id`, `garage_sale_id`, `hidden_for_one`, `hidden_for_two`. SELECT RLS filters out threads hidden for the caller. INSERT requires `garage_sale_id is not null`, the linked sale's `contact_enabled = true`, and the sale owner is one of the two participants. No user-facing UPDATE or DELETE policy — those flow through `find_or_create_thread()` and `hide_thread()` RPCs. |
 | `messages`        | Individual messages.                                                    | `read_at` for unread counts. UPDATE is column-restricted to `read_at` only (column-level grant on top of RLS). Trigger maintains parent thread's `last_message_at` / preview AND un-hides for the recipient on a new message. |
+| `message_notifications` | Idempotency claim for per-message email sends.                    | `(message_id pk, notified_at)`. Prevents the `/api/notifications/message` endpoint from being replayed to spam emails. RLS on with no user-facing policies; only the service role writes. |
 
 ### Lifecycle / cron
 
-- A pg_cron job runs nightly at 03:00 UTC: `delete from garage_sales where end_date < current_date - interval '30 days'`.
-- Sale-photo storage cleanup happens client-side when the owner deletes the sale (best-effort).
+- A pg_cron job runs nightly at 03:00 UTC and deletes `garage_sales` rows where `end_date < current_date - interval '30 days'` **OR** `deleted_at < now() - interval '30 days'`. Hard-delete then cascades to `saved_sales` / `route_stops`.
+- Owner "Delete" is a soft-delete: sets `deleted_at = now()` so saved-sales and route-stops referencing the sale render a "removed" tombstone for ~30 days before the cron purges.
+- Sale-photo storage cleanup happens client-side when the owner deletes the sale (best-effort). For *edits*, photo removals are staged via `PhotoUploader.commitPendingDeletes()` and only fire on submit success — so a user who removes a photo and then closes the page without saving doesn't end up with a broken-image reference.
 
 ### Migrations (in order)
 
@@ -84,6 +86,9 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 12. `0012_messaging_rls_hardening.sql` — column-level grant restricts `messages` UPDATE to `read_at` only; new threads INSERT policy requires non-null `garage_sale_id`, `contact_enabled = true`, and sale owner is a participant; user-facing UPDATE policy on threads dropped (the on-message trigger is `security definer` and unaffected).
 13. `0013_unread_counts_rpc.sql` — adds `unread_counts_by_thread()` RPC (security invoker) returning one row per thread with unread messages from the other side, replacing the inbox's N+1 fan-out.
 14. `0014_thread_hide_per_user.sql` — adds `hidden_for_one` / `hidden_for_two` columns; updates SELECT RLS so a hidden thread disappears for the hider only; updates `update_thread_on_message` trigger to un-hide for the recipient on each new message; adds `hide_thread(uuid)` and `find_or_create_thread(uuid, uuid)` security-definer RPCs; drops the user-facing DELETE policy on threads.
+15. `0015_message_notifications.sql` — adds the `message_notifications` claim table for idempotent email sends in `/api/notifications/message`. Sidesteps the `messages` realtime publication so the layout's unread-delta handler can't misinterpret the claim INSERT.
+16. `0016_thread_create_buyer_only.sql` — replaces `find_or_create_thread` with a buyer-only version. Caller must NOT be the sale owner; `p_other_user_id` MUST be the sale owner. Closes a path where an owner could spawn empty threads against arbitrary user ids.
+17. `0017_soft_delete_garage_sales.sql` — adds `garage_sales.deleted_at` (with a partial index) and re-schedules the cleanup cron to also purge tombstones older than 30 days. Owner "Delete" now sets `deleted_at` instead of physically deleting, so saved-sales / route-stops referencing the sale stay rendered as a tombstone until the cron purges.
 
 ---
 
@@ -111,15 +116,17 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 
 ### Components
 
-`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader`, `PhotoLightbox`, `ConfirmModal`, `ToastContainer`, `AutoLinkText` (renders bare http(s) URLs in user text as safe anchor tags via segment-based parsing — no `v-html`).
+`BrowseFilters`, `BrowseSaleCard`, `BrowseSaleDetail`, `BrowseMap`, `RouteMap`, `PhotoUploader` (parallel uploads with concurrency 3, stages `commitPendingDeletes` for already-saved photos), `PhotoLightbox`, `ConfirmModal`, `ToastContainer`, `AutoLinkText` (renders bare http(s) URLs in user text as safe anchor tags via segment-based parsing — no `v-html`; rebalances trailing `)` so Wikipedia-style URLs stay intact).
+
+There's also a project-level `app/error.vue` — Nuxt's global error boundary, brand-styled. Renders for both 4xx (e.g., the `createError({ statusCode: 404 })` thrown by sale/route loaders for missing rows) and 5xx.
 
 ### Composables
 
-`useGarageSales` (with `findOverlappingSale` + `findOverlappingSaleWithRetry`), `useSavedSales`, `useRoutes`, `useRouteOptimizer` (with `optimizeRoute`, `buildRouteFromOrder`, `buildTimeline`, `getCurrentPosition`), `useGeocode` (forward + reverse), `useMessaging` (`findOrCreateThread`, `sendMessage`, `markThreadRead`, `hideThread`, `fetchInbox`, `fetchThreadWithMessages`, `useUnreadCount` with `incrementUnread` / `decrementUnread`), `useSalePhotos`, `useToast` (monotonic IDs), `useConfirm`, `useFocusTrap` (modal focus management — captures previously focused element, traps Tab inside container, restores focus on close).
+`useGarageSales` (with `findOverlappingSale` + `findOverlappingSaleWithRetry` + `isRemovedSale`), `useSavedSales`, `useRoutes`, `useRouteOptimizer` (with `optimizeRoute`, `buildRouteFromOrder`, `buildTimeline`, `getCurrentPosition`, `GOOGLE_MAX_WAYPOINTS`), `useGeocode` (forward + reverse), `useMessaging` (`findOrCreateThread`, `sendMessage`, `markThreadRead`, `hideThread`, `fetchInbox`, `fetchThreadWithMessages`, `useUnreadCount` with `incrementUnread` / `decrementUnread`), `useSalePhotos`, `useToast` (monotonic IDs via `useState` so SSR requests don't share state), `useConfirm`, `useFocusTrap` (modal focus management — captures previously focused element, traps Tab inside container, restores focus on close).
 
 ### Utils
 
-`saleStatus` (active/upcoming/past + pin colors + date/time formatters), `filters` (day + time-bucket filtering), `ownerStatus` (status options + badge/banner Tailwind class helpers).
+`saleStatus` (active/upcoming/past + pin colors + date/time formatters + `isExpiredSale`), `filters` (day + time-bucket filtering), `ownerStatus` (status options + badge/banner Tailwind class helpers), `date` (`todayLocalISO()` + `toLocalISO(d)` — local-timezone date strings; the previous `new Date().toISOString().slice(0, 10)` pattern shifted to UTC and broke "today" cutoffs in the evening).
 
 ### Key behaviors
 
@@ -142,6 +149,15 @@ See `~/.claude/projects/C--Users-missa-garage-sales/memory/user_missa.md` for mo
 - **Mapbox container resize.** `BrowseMap.vue` runs a `ResizeObserver` on its container and calls `map.resize()` on every change. Mapbox's built-in `trackResize` only listens to *window* resizes, so without this the canvas would freeze at its initial size whenever internal layout shifts (mobile stacked detail+map, tab swaps) grew the container — pins past the original size would float over empty cream.
 - **BrowseMap marker rebuild watch.** Watches a stable `id:lat:lng` signature instead of `props.sales` deeply, so a sale-status update (or any non-spatial property change) doesn't tear down + re-create every marker mid-hover. Popup HTML reads `props.sales.find(...)` on each open, so non-marker fields stay live without a rebuild.
 - **Modal focus traps.** `ConfirmModal` and `PhotoLightbox` use `useFocusTrap` to focus the first focusable element on open, trap Tab, and restore focus to the trigger on close. ConfirmModal also dropped the global Enter-anywhere-confirms handler — Cancel is the first focusable, so a stray Enter on first paint cancels rather than firing destructive actions.
+- **Soft-deleted sales (tombstones).** Owner "Delete" sets `garage_sales.deleted_at` instead of cascading. Saved-sales / route-stops referencing the tombstone render in **red** with a "⚠ Removed by the owner" notice; the link is dead (the sale page 404s for tombstones). Tombstones are excluded from route optimize/build/maps-export. The cron purges tombstones >30 days old, at which point the FK cascade finally drops the saved/stop rows.
+- **Expired sales.** Sales whose `end_date` is past render in **yellow** with "⏳ This sale has ended" in saved-sales / route-stops. They stay clickable (the underlying row still exists) and stay in route calculations (coords valid for past-route review). Use `isExpiredSale(sale)` from `utils/saleStatus`.
+- **Real 404s + brand-styled error page.** `sale/[id]`, `itineraries/[id]`, `share/[id]`, and `post/[id]` loaders throw `createError({ statusCode: 404 })` when the row is missing or soft-deleted. `app/error.vue` renders a styled 404 / 5xx with "Browse sales" / "Back home" buttons.
+- **Local-timezone "today".** Use `todayLocalISO()` / `toLocalISO(d)` from `app/utils/date.ts`. Don't reach for `new Date().toISOString().slice(0, 10)` — it returns the UTC date and silently shifts to "tomorrow" between roughly 6pm and midnight in any Western Hemisphere timezone, which broke pin colors, the `:min` on the post form, the day chips on `/browse`, and the `fetchActiveSales` cutoff.
+- **Email idempotency.** `/api/notifications/message` claims a row in `message_notifications` (`INSERT … ON CONFLICT DO NOTHING`) before sending. Replays return `{ skipped: 'already notified' }`. Kept in a separate table from `messages` so the layout's unread-delta handler can't misinterpret the claim as a mark-read UPDATE.
+- **Geolocation cache TTL.** `gst:user-location` in localStorage now expires — 7 days for granted, 24 hours for denied. After expiry the page re-prompts (so users who move cities or change their mind aren't stuck forever).
+- **Post dup-check is same-user only.** `findOverlappingSale` filters `.eq('user_id', userId)` so condo neighbors, multi-family sales on a shared cul-de-sac, and multi-vendor flea markets aren't hard-blocked. The check still catches "I posted twice" within a single account. Both call sites use `findOverlappingSaleWithRetry`, which retries once and surfaces a soft `toast.info` if the check itself can't complete.
+- **Photo edit safety.** `PhotoUploader` snapshots the `modelValue` it loads with as `initialUrls`. Removing one of those staged URLs only stages the storage delete (`pendingDeletes`); session-uploaded URLs delete immediately. The parent calls `commitPendingDeletes()` after a successful save. Result: a user removing an existing photo and closing the page without saving doesn't end up with a row referencing a missing storage object.
+- **togglePublic refetches.** `/itineraries/[id]`'s "Make public" button calls `useAsyncData`'s `refresh()` after the DB update instead of mutating `data.value.route.is_public` directly — the direct mutation could be silently clobbered by a concurrent refresh.
 - **Autolinking user text.** Sale descriptions (in `BrowseSaleDetail` + `sale/[id]`) and message bodies (in `inbox/[id]`) render through `<AutoLinkText :text>`. URL detection is segment-based (no `v-html`); trailing punctuation common at sentence-end (`.,!?]) `) is peeled off so prose reads naturally; sender bubbles in the inbox pass a custom `link-class` so links read as white-underlined against the orange bubble.
 - **Mobile Enter-to-send.** `/inbox/[id]`'s textarea only auto-submits on `Enter` for devices matching `(hover: hover) and (pointer: fine)` — i.e. real keyboards. On phones / touch devices, Enter inserts a newline as the on-screen keyboard expects, and Send is the on-screen button.
 - **Photo uploads.** `PhotoUploader` runs uploads in parallel with a concurrency cap of 3, using `Promise.allSettled` so one bad file doesn't kill the batch. Non-image files are filtered up front and reported as a single inline notice.
@@ -165,7 +181,10 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 
 ## Known gaps / what's left
 
-- **Auth emails through Resend.** Currently we use Supabase's default mailer (rate-limited, generic sender). Frula already has a verified Resend domain we could borrow.
+- **Auth emails through Resend.** Currently we use Supabase's default mailer (rate-limited, generic sender). The Resend SDK + idempotent `/api/notifications/message` endpoint are wired in, but the auth side (signup confirmation, password reset) still goes through Supabase's mailer. Frula already has a verified Resend domain we could borrow.
+- **`public/og-image.png` is missing.** Both `/sale/[id]` and `/share/[id]` reference `${siteUrl}/og-image.png` as the OG fallback when no sale photos exist. Need a 1200×630 PNG (brand wordmark + tagline).
+- **Mapbox token URL allowlist.** Set in the Mapbox dashboard before deploy — without it, anyone can lift the public token and run up the bill.
+- **Viewport-aware `/browse` fetch.** `fetchActiveSales` returns every active sale unbounded. Fine today; once a few thousand sales are live nationwide we'd want bbox + radius filters with a hard `limit(500)`.
 - **No mobile drawer for filters** — currently the browse page uses simple tab navigation between filters/list/map on small screens.
 - **No deploy yet.** README has the Vercel walk-through — Missa needs to push the button and configure Supabase + Mapbox URL allowlists for the production domain. Once shipped, FB/Open Graph previews start working (FB's scraper needs a public URL).
 - **No reviews / ratings.**
@@ -198,3 +217,6 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 - **Realtime channels** are owned by the page/layout that subscribes; teardown happens in `onBeforeUnmount` via `supabase.removeChannel(channel)`. Don't forget this when adding new subscribers — leaked channels burn Supabase realtime quota.
 - **No physical thread DELETE.** As of migration 0014 the user-facing DELETE policy on `message_threads` is gone — "Remove from inbox" only flips a per-user hide flag. If a future feature genuinely needs to wipe a thread (admin tooling, legal removal, etc.) it'll need a service-role escape hatch, not a user-visible button.
 - **Inbox unread is delta-driven, not refetch-driven.** The layout's realtime channel increments / decrements `unread.count` from `payload.new.sender_id` instead of refetching `count(*)`. This requires that the only legal `messages` UPDATE is `read_at` (enforced by 0012's column-level grant) — if that constraint loosens, the delta math has to change too.
+- **No physical sale DELETE from the UI.** As of migration 0017 the owner "Delete" button does a soft-delete (`deleted_at = now()`). Saved-sales / route-stops referencing the row stay rendered as red tombstones until the cron purges 30 days later. If a future flow genuinely needs an immediate hard-delete (legal takedown, etc.) it'll need a service-role path.
+- **Removed vs Expired routing semantics.** Tombstones (red) are excluded from route optimize/build/maps export — the listing is gone, no point routing to it. Expired sales (yellow, end_date past) are KEPT in route calculations because their coords are still valid and the user might be reflecting on a past route. Different rule, on purpose.
+- **Buyer-only thread initiation.** Migration 0016's `find_or_create_thread` rejects calls where the caller is the sale owner OR the other party is not the sale owner. Only buyers can start threads; owners can only reply. If a future feature lets sellers proactively reach out to interested buyers it'll need its own RPC.
