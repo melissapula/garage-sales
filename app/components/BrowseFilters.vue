@@ -17,35 +17,60 @@ const emit = defineEmits<{
 }>()
 
 // =============================================================================
-// Day filter
+// Date-range filter
 // =============================================================================
-const availableDays = computed(() => {
-    const set = new Set<string>()
-    for (const s of props.sales) {
-        const start = new Date(s.start_date + 'T00:00:00')
-        const end = new Date(s.end_date + 'T00:00:00')
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            set.add(toLocalISO(d))
-        }
-    }
-    return [...set].sort()
-})
-
-function dayLabel(iso: string): string {
-    const today = todayLocalISO()
-    const d = new Date(iso + 'T00:00:00')
-    if (iso === today) return 'Today'
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    if (iso === toLocalISO(tomorrow)) return 'Tomorrow'
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+function setDateStart(iso: string | null) {
+    emit('update:modelValue', {
+        ...props.modelValue,
+        dateRange: { ...props.modelValue.dateRange, start: iso },
+    })
 }
 
-function toggleDay(iso: string) {
-    const days = props.modelValue.days.includes(iso)
-        ? props.modelValue.days.filter((d) => d !== iso)
-        : [...props.modelValue.days, iso]
-    emit('update:modelValue', { ...props.modelValue, days })
+function setDateEnd(iso: string | null) {
+    emit('update:modelValue', {
+        ...props.modelValue,
+        dateRange: { ...props.modelValue.dateRange, end: iso },
+    })
+}
+
+function clearDateRange() {
+    emit('update:modelValue', {
+        ...props.modelValue,
+        dateRange: { start: null, end: null },
+    })
+}
+
+// Quick presets — the picker handles arbitrary ranges, but the most
+// common queries ("today", "this weekend") are worth one tap.
+function applyPresetToday() {
+    const today = todayLocalISO()
+    emit('update:modelValue', {
+        ...props.modelValue,
+        dateRange: { start: today, end: today },
+    })
+}
+
+function applyPresetThisWeekend() {
+    // "This weekend" = the upcoming Saturday + Sunday, OR today + tomorrow
+    // when today is Saturday or Sunday.
+    const now = new Date()
+    const dow = now.getDay() // 0 Sun, 6 Sat
+    const start = new Date(now)
+    if (dow === 0) {
+        // It's Sunday — show Sun only.
+        // (start = today, end = today)
+    } else if (dow === 6) {
+        // Saturday — show Sat–Sun.
+    } else {
+        // Mon–Fri — jump to upcoming Saturday.
+        start.setDate(now.getDate() + (6 - dow))
+    }
+    const end = new Date(start)
+    if (start.getDay() === 6) end.setDate(start.getDate() + 1) // Sat → end Sun
+    emit('update:modelValue', {
+        ...props.modelValue,
+        dateRange: { start: toLocalISO(start), end: toLocalISO(end) },
+    })
 }
 
 // =============================================================================
@@ -121,7 +146,8 @@ function setRadius(miles: number) {
 // =============================================================================
 const hasFilters = computed(
     () =>
-        props.modelValue.days.length > 0 ||
+        props.modelValue.dateRange.start !== null ||
+        props.modelValue.dateRange.end !== null ||
         props.modelValue.timeBuckets.length > 0 ||
         props.modelValue.location !== null,
 )
@@ -224,25 +250,72 @@ function clearAll() {
             </div>
         </div>
 
-        <!-- Day -->
+        <!-- Dates -->
         <div>
-            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Day</h3>
-            <ul class="space-y-1.5">
-                <li v-for="iso in availableDays" :key="iso">
-                    <label class="flex cursor-pointer items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
-                            class="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                            :checked="modelValue.days.includes(iso)"
-                            @change="toggleDay(iso)"
-                        />
-                        <span class="text-gray-800">{{ dayLabel(iso) }}</span>
-                    </label>
-                </li>
-                <li v-if="availableDays.length === 0" class="text-sm text-gray-500">
-                    No sales currently posted.
-                </li>
-            </ul>
+            <div class="mb-2 flex items-center justify-between">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Dates
+                </h3>
+                <button
+                    v-if="modelValue.dateRange.start || modelValue.dateRange.end"
+                    type="button"
+                    class="text-xs text-sky-700 hover:underline"
+                    @click="clearDateRange"
+                >
+                    Clear
+                </button>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5">
+                <button
+                    type="button"
+                    class="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-brand-300"
+                    @click="applyPresetToday"
+                >
+                    Today
+                </button>
+                <button
+                    type="button"
+                    class="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700 transition hover:border-brand-300"
+                    @click="applyPresetThisWeekend"
+                >
+                    This weekend
+                </button>
+            </div>
+
+            <div class="mt-3 space-y-2">
+                <label class="flex items-center gap-2 text-sm">
+                    <span class="w-10 shrink-0 text-gray-600">From</span>
+                    <input
+                        type="date"
+                        class="input flex-1 !min-h-[40px] !text-sm"
+                        :value="modelValue.dateRange.start ?? ''"
+                        @input="
+                            setDateStart(
+                                ($event.target as HTMLInputElement).value || null,
+                            )
+                        "
+                    />
+                </label>
+                <label class="flex items-center gap-2 text-sm">
+                    <span class="w-10 shrink-0 text-gray-600">To</span>
+                    <input
+                        type="date"
+                        class="input flex-1 !min-h-[40px] !text-sm"
+                        :min="modelValue.dateRange.start ?? undefined"
+                        :value="modelValue.dateRange.end ?? ''"
+                        @input="
+                            setDateEnd(
+                                ($event.target as HTMLInputElement).value || null,
+                            )
+                        "
+                    />
+                </label>
+            </div>
+
+            <p class="mt-2 text-xs text-gray-500">
+                Leave a side blank for an open-ended range.
+            </p>
         </div>
 
         <!-- Time -->

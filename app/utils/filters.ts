@@ -8,8 +8,15 @@ export interface FilterLocation {
     label: string
 }
 
+export interface DateRange {
+    /** Inclusive lower bound, ISO `YYYY-MM-DD`. `null` means open-ended. */
+    start: string | null
+    /** Inclusive upper bound, ISO `YYYY-MM-DD`. `null` means open-ended. */
+    end: string | null
+}
+
 export interface BrowseFiltersValue {
-    days: string[]
+    dateRange: DateRange
     timeBuckets: TimeBucket[]
     location: FilterLocation | null
     radiusMiles: number
@@ -18,7 +25,12 @@ export interface BrowseFiltersValue {
 export const RADIUS_OPTIONS = [10, 25, 50, 100] as const
 
 export function emptyFilters(): BrowseFiltersValue {
-    return { days: [], timeBuckets: [], location: null, radiusMiles: 25 }
+    return {
+        dateRange: { start: null, end: null },
+        timeBuckets: [],
+        location: null,
+        radiusMiles: 25,
+    }
 }
 
 /** Great-circle distance in miles between two lat/lng points. */
@@ -39,8 +51,15 @@ export function haversineMiles(
     return R * c
 }
 
-function saleSpansDay(sale: GarageSale, iso: string): boolean {
-    return sale.start_date <= iso && iso <= sale.end_date
+/**
+ * True when the sale's `[start_date, end_date]` interval has any overlap
+ * with the picker's `[start, end]` range. Either bound on the picker
+ * may be null (open-ended on that side).
+ */
+function saleOverlapsRange(sale: GarageSale, range: DateRange): boolean {
+    if (range.start && sale.end_date < range.start) return false
+    if (range.end && sale.start_date > range.end) return false
+    return true
 }
 
 const BUCKET_RANGES: Record<TimeBucket, { startMin: number; endMin: number }> = {
@@ -65,8 +84,8 @@ function saleMatchesBucket(sale: GarageSale, bucket: TimeBucket): boolean {
 
 export function applyFilters(sales: GarageSale[], filters: BrowseFiltersValue): GarageSale[] {
     return sales.filter((sale) => {
-        if (filters.days.length > 0) {
-            if (!filters.days.some((d) => saleSpansDay(sale, d))) return false
+        if (filters.dateRange.start || filters.dateRange.end) {
+            if (!saleOverlapsRange(sale, filters.dateRange)) return false
         }
         if (filters.timeBuckets.length > 0) {
             if (!filters.timeBuckets.some((b) => saleMatchesBucket(sale, b))) return false
