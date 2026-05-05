@@ -98,9 +98,39 @@ function readLocationCache(): CachedLocation | null {
     }
 }
 
+/**
+ * Seed the radius filter from the user's coordinates. Sets the
+ * filter immediately with a placeholder label so the radius circle
+ * kicks in without waiting on the reverse-geocode round-trip; the
+ * pretty label backfills when the geocode resolves. Reset each page
+ * load — the filter is intentionally session-only, so a user who
+ * clears it during a session keeps it cleared for that session, but
+ * still sees the default re-applied on the next visit.
+ */
+async function applyUserLocationToFilter(lng: number, lat: number) {
+    filters.value = {
+        ...filters.value,
+        location: { lng, lat, label: 'Your location' },
+    }
+    try {
+        const label = await reverseGeocode(lng, lat)
+        if (label && filters.value.location) {
+            filters.value = {
+                ...filters.value,
+                location: { lng, lat, label },
+            }
+        }
+    } catch {
+        // keep the placeholder
+    }
+}
+
 if (import.meta.client) {
     const cached = readLocationCache()
-    if (cached?.granted) userCenter.value = [cached.lng, cached.lat]
+    if (cached?.granted) {
+        userCenter.value = [cached.lng, cached.lat]
+        applyUserLocationToFilter(cached.lng, cached.lat)
+    }
 }
 
 onMounted(async () => {
@@ -110,6 +140,7 @@ onMounted(async () => {
     try {
         const pos = await getCurrentPosition()
         userCenter.value = [pos.lng, pos.lat]
+        applyUserLocationToFilter(pos.lng, pos.lat)
         const entry: CachedLocation = { asked: true, granted: true, lng: pos.lng, lat: pos.lat, ts: Date.now() }
         localStorage.setItem(LOCATION_KEY, JSON.stringify(entry))
     } catch {

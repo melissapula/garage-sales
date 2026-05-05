@@ -22,8 +22,6 @@ export interface BrowseFiltersValue {
     radiusMiles: number
 }
 
-export const RADIUS_OPTIONS = [10, 25, 50, 100] as const
-
 export function emptyFilters(): BrowseFiltersValue {
     return {
         dateRange: { start: null, end: null },

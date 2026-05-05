@@ -3,7 +3,6 @@ import type { GarageSale } from '~/composables/useGarageSales'
 import {
     type BrowseFiltersValue,
     type FilterLocation,
-    RADIUS_OPTIONS,
     emptyFilters,
 } from '~/utils/filters'
 
@@ -223,23 +222,29 @@ function clearAll() {
             </p>
 
             <div class="mt-3">
-                <p class="mb-1.5 text-xs text-gray-600">Within</p>
-                <div class="flex flex-wrap gap-1">
-                    <button
-                        v-for="r in RADIUS_OPTIONS"
-                        :key="r"
-                        type="button"
-                        class="rounded-full border px-3 py-1 text-xs font-semibold transition"
-                        :class="
-                            modelValue.radiusMiles === r
-                                ? 'border-brand-500 bg-brand-500 text-white'
-                                : 'border-gray-200 bg-white text-gray-700 hover:border-brand-300'
-                        "
-                        :disabled="!modelValue.location"
-                        @click="setRadius(r)"
-                    >
-                        {{ r }} mi
-                    </button>
+                <div class="mb-1.5 flex items-baseline justify-between text-xs text-gray-600">
+                    <span>Within</span>
+                    <span class="font-semibold text-gray-900">
+                        {{ modelValue.radiusMiles }} mi
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min="5"
+                    max="100"
+                    step="5"
+                    class="w-full accent-brand-500"
+                    :value="modelValue.radiusMiles"
+                    :disabled="!modelValue.location"
+                    @input="
+                        setRadius(
+                            parseInt(($event.target as HTMLInputElement).value, 10),
+                        )
+                    "
+                />
+                <div class="mt-1 flex justify-between text-[10px] text-gray-400">
+                    <span>5 mi</span>
+                    <span>100 mi</span>
                 </div>
                 <p
                     v-if="!modelValue.location"

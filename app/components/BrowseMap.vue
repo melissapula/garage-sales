@@ -249,6 +249,10 @@ onMounted(async () => {
         renderMarkers()
         // Apply initial selection state once markers are placed.
         syncFromProps()
+        // Frame all visible sales on first paint (after the user
+        // grants geolocation, fitToSales overrides the initial center
+        // if there are pins to show).
+        fitToSales()
     })
 
     // Mapbox's built-in trackResize only listens for *window* resizes, so
@@ -309,9 +313,31 @@ watch(
         if (map?.loaded()) {
             renderMarkers()
             syncFromProps()
+            fitToSales()
         }
     },
 )
+
+/**
+ * Frame the map so every visible sale is on screen. Triggered on
+ * filtered-set changes — flipping a filter or hitting Refresh
+ * recomputes the bounds. We don't snap on hover/select changes
+ * because those don't change the set, so a user who's manually panned
+ * won't get yanked around mid-interaction.
+ *
+ * `maxZoom: 13` keeps a single-pin result from zooming to street
+ * level; padding keeps pins off the legend / nav-control overlays.
+ */
+function fitToSales() {
+    if (!map || props.sales.length === 0) return
+    const bounds = new mapboxgl.LngLatBounds()
+    for (const s of props.sales) bounds.extend([s.lng, s.lat])
+    map.fitBounds(bounds, {
+        padding: { top: 80, right: 60, bottom: 60, left: 60 },
+        maxZoom: 13,
+        duration: 600,
+    })
+}
 
 // If the initial center resolves after mount (e.g., the user grants the
 // browser geolocation prompt asynchronously), fly the map there. We don't
