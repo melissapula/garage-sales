@@ -32,6 +32,7 @@ const emit = defineEmits<{
 const config = useRuntimeConfig()
 const mapEl = ref<HTMLDivElement | null>(null)
 let map: mapboxgl.Map | null = null
+let resizeObserver: ResizeObserver | null = null
 const markers: mapboxgl.Marker[] = []
 
 const BEMIDJI: [number, number] = [-94.8826, 47.4716]
@@ -337,12 +338,25 @@ onMounted(() => {
         render()
         syncFromProps()
     })
+
+    // Mapbox's built-in trackResize only fires on *window* resizes, so
+    // the canvas would freeze at its initial container width whenever
+    // surrounding layout shifts grew the column (longer stops list,
+    // expanded "available saved sales" panel, etc.). Watch the
+    // container itself and resize on every change. Same fix we applied
+    // to BrowseMap for the same reason.
+    resizeObserver = new ResizeObserver(() => {
+        map?.resize()
+    })
+    resizeObserver.observe(mapEl.value)
 })
 
 onBeforeUnmount(() => {
     clearHoverTimer()
     closeActivePopup()
     clearMarkers()
+    resizeObserver?.disconnect()
+    resizeObserver = null
     map?.remove()
     map = null
 })
