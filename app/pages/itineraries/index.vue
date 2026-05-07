@@ -155,10 +155,7 @@ const displayedSavedSales = computed(() =>
                         </span>
                         <div class="mt-0.5 text-xs text-gray-600">{{ row.sale.address }}</div>
                         <div class="mt-0.5 text-xs text-gray-500">
-                            {{ formatDateRange(row.sale.start_date, row.sale.end_date) }}
-                            <template v-if="row.sale.start_time || row.sale.end_time">
-                                · {{ formatTimeRange(row.sale.start_time, row.sale.end_time) }}
-                            </template>
+                            {{ summarizeSchedule(row.sale).compact }}
                         </div>
                     </div>
                     <button

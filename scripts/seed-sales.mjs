@@ -1,8 +1,35 @@
 // Seed garage sales into Supabase.
 //
 // Reads scripts/seed-data.json (an array of sale objects), geocodes each
-// address via Mapbox, and inserts the rows using the service role key
-// (bypasses RLS).
+// address via Mapbox, and inserts into garage_sales + sale_dates using
+// the service role key (bypasses RLS).
+//
+// Two accepted entry shapes:
+//
+//  Legacy (still works) — single time window across a contiguous range:
+//    {
+//      "user_id": "...",
+//      "title": "...",
+//      "address": "...",
+//      "start_date": "2026-05-07",
+//      "end_date": "2026-05-09",
+//      "start_time": "08:00",  // optional
+//      "end_time": "17:00"     // optional
+//    }
+//  Each day in [start_date, end_date] becomes one sale_dates row with
+//  the same start/end times.
+//
+//  Per-day — explicit list of days, each with its own optional times:
+//    {
+//      "user_id": "...",
+//      "title": "...",
+//      "address": "...",
+//      "dates": [
+//        { "date": "2026-05-07", "start_time": "08:00", "end_time": "17:30" },
+//        { "date": "2026-05-08", "start_time": "08:00", "end_time": "17:30" },
+//        { "date": "2026-05-09", "start_time": "08:00", "end_time": "14:00" }
+//      ]
+//    }
 //
 // Usage:
 //   1. Copy scripts/seed-data.example.json → scripts/seed-data.json
@@ -66,6 +93,60 @@ async function geocode(address) {
     }
 }
 
+/** Expand a legacy entry's [start_date, end_date] into per-day rows. */
+function expandRange(startDate, endDate, startTime, endTime) {
+    const out = []
+    const start = new Date(startDate + 'T00:00:00')
+    const end = new Date(endDate + 'T00:00:00')
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        out.push({
+            date: `${y}-${m}-${day}`,
+            start_time: startTime ?? null,
+            end_time: endTime ?? null,
+        })
+    }
+    return out
+}
+
+/**
+ * Normalize either entry shape into a `dates` array. Returns null if
+ * the entry lacks both shapes (caller treats that as a validation fail).
+ */
+function normalizeDates(sale) {
+    if (Array.isArray(sale.dates) && sale.dates.length) {
+        return sale.dates.map((d) => ({
+            date: d.date,
+            start_time: d.start_time ?? null,
+            end_time: d.end_time ?? null,
+        }))
+    }
+    if (sale.start_date && sale.end_date) {
+        return expandRange(
+            sale.start_date,
+            sale.end_date,
+            sale.start_time,
+            sale.end_time,
+        )
+    }
+    return null
+}
+
+/** Compute the envelope (min/max date, min start, max end) over a list of days. */
+function envelope(dates) {
+    const sortedDates = [...dates].map((d) => d.date).sort()
+    const starts = dates.map((d) => d.start_time).filter(Boolean).sort()
+    const ends = dates.map((d) => d.end_time).filter(Boolean).sort()
+    return {
+        start_date: sortedDates[0],
+        end_date: sortedDates[sortedDates.length - 1],
+        start_time: starts.length ? starts[0] : null,
+        end_time: ends.length ? ends[ends.length - 1] : null,
+    }
+}
+
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { autoRefreshToken: false, persistSession: false },
 })
@@ -74,10 +155,19 @@ const inserted = []
 const failed = []
 
 for (const sale of sales) {
-    const required = ['user_id', 'title', 'address', 'start_date', 'end_date']
+    const required = ['user_id', 'title', 'address']
     const missing = required.filter((k) => !sale[k])
     if (missing.length) {
         failed.push({ sale, reason: `Missing fields: ${missing.join(', ')}` })
+        continue
+    }
+
+    const dates = normalizeDates(sale)
+    if (!dates || dates.length === 0) {
+        failed.push({
+            sale,
+            reason: 'Need either `dates: [...]` or `start_date` + `end_date`.',
+        })
         continue
     }
 
@@ -93,6 +183,8 @@ for (const sale of sales) {
         continue
     }
 
+    const env = envelope(dates)
+
     const row = {
         user_id: sale.user_id,
         title: sale.title,
@@ -100,10 +192,10 @@ for (const sale of sales) {
         address: resolved.address,
         lat: resolved.lat,
         lng: resolved.lng,
-        start_date: sale.start_date,
-        end_date: sale.end_date,
-        start_time: sale.start_time ?? null,
-        end_time: sale.end_time ?? null,
+        start_date: env.start_date,
+        end_date: env.end_date,
+        start_time: env.start_time,
+        end_time: env.end_time,
     }
 
     const { data, error } = await supabase
@@ -116,8 +208,30 @@ for (const sale of sales) {
         failed.push({ sale, reason: `Insert error: ${error.message}` })
         continue
     }
-    inserted.push({ id: data.id, title: data.title, address: resolved.address })
-    console.log(`  ✓ ${data.title} — ${resolved.address}`)
+
+    // Insert per-day rows. The envelope trigger fires per row and
+    // recomputes garage_sales.start_date/end_date/start_time/end_time —
+    // a no-op since we already passed matching values above.
+    const { error: dErr } = await supabase
+        .from('sale_dates')
+        .insert(
+            dates.map((d) => ({
+                sale_id: data.id,
+                sale_date: d.date,
+                start_time: d.start_time,
+                end_time: d.end_time,
+            })),
+        )
+    if (dErr) {
+        // Roll back the parent so we don't leave an orphaned envelope-only
+        // row that breaks the per-day display logic in the UI.
+        await supabase.from('garage_sales').delete().eq('id', data.id)
+        failed.push({ sale, reason: `sale_dates insert: ${dErr.message}` })
+        continue
+    }
+
+    inserted.push({ id: data.id, title: data.title, address: resolved.address, days: dates.length })
+    console.log(`  ✓ ${data.title} — ${resolved.address} (${dates.length} day${dates.length === 1 ? '' : 's'})`)
 }
 
 console.log(`\nInserted ${inserted.length} sale(s).`)

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { emptyDay, scheduleDates, scheduleEnvelope, validateSchedule, type ScheduleDay } from '~/utils/schedule'
+
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const router = useRouter()
@@ -10,10 +12,7 @@ const title = ref('')
 const description = ref('')
 const addressInput = ref('')
 const resolved = ref<{ address: string; lat: number; lng: number } | null>(null)
-const startDate = ref('')
-const endDate = ref('')
-const startTime = ref('')
-const endTime = ref('')
+const days = ref<ScheduleDay[]>([emptyDay()])
 const photos = ref<string[]>([])
 const contactEnabled = ref(true)
 
@@ -31,20 +30,41 @@ watch(addressInput, () => {
 const validationError = computed<string | null>(() => {
     if (!title.value.trim()) return 'Add a title.'
     if (!resolved.value) return 'Find the address on the map first.'
-    if (!startDate.value) return 'Pick a start date.'
-    if (startDate.value < today) return "Start date can't be in the past."
-    if (!endDate.value) return 'Pick an end date.'
-    if (endDate.value < today) return "End date can't be in the past."
-    if (endDate.value < startDate.value) return 'End date must be on or after the start date.'
-    if (!startTime.value) return 'Pick a start time.'
-    if (!endTime.value) return 'Pick an end time.'
-    if (startDate.value === endDate.value && endTime.value <= startTime.value) {
-        return 'End time must be after the start time.'
-    }
-    return null
+    return validateSchedule(days.value)
 })
 
 const isValid = computed(() => validationError.value === null)
+
+function addDay() {
+    // Default the new row's date to one day after the last filled date,
+    // so adding "another day" tends to mean "the next day" by default.
+    const dates = days.value.map((d) => d.date).filter(Boolean).sort()
+    let next = ''
+    if (dates.length) {
+        const last = new Date(dates[dates.length - 1] + 'T00:00:00')
+        last.setDate(last.getDate() + 1)
+        next = toLocalISO(last)
+    }
+    // Inherit the previous row's times if it had any — most multi-day
+    // sales DO use the same hours every day, and per-day variation is
+    // the exception worth typing into.
+    const prev = days.value[days.value.length - 1]
+    days.value.push({
+        date: next,
+        start_time: prev?.start_time ?? '',
+        end_time: prev?.end_time ?? '',
+    })
+}
+
+function removeDay(i: number) {
+    if (days.value.length === 1) {
+        // Don't let the user remove the last row — the form requires
+        // at least one day. Reset it instead.
+        days.value[0] = emptyDay()
+        return
+    }
+    days.value.splice(i, 1)
+}
 
 async function findAddress() {
     error.value = null
@@ -81,24 +101,26 @@ async function submit() {
     }
     saving.value = true
 
-    // Reject if another active sale at the same address overlaps these dates.
-    // The retry helper tries twice; if both attempts fail we still post,
-    // but flag the user so they can sanity-check the map.
+    const dates = scheduleDates(days.value)
+    const envelope = scheduleEnvelope(days.value)
+
+    // Reject if another active sale at the same address shares any day
+    // with this one. The retry helper tries twice; if both attempts fail
+    // we still post, but flag the user so they can sanity-check the map.
     let dupCheckFailed = false
     try {
         const conflict = await findOverlappingSaleWithRetry(
             user.value.id,
             resolved.value!.lat,
             resolved.value!.lng,
-            startDate.value,
-            endDate.value,
+            dates,
         )
         if (conflict) {
             saving.value = false
+            const dayList = conflict.conflictDates.join(', ')
             error.value =
-                `You've already got a sale at this address overlapping these dates: ` +
-                `"${conflict.title}" (${conflict.start_date} – ${conflict.end_date}). ` +
-                `Edit that one instead, or pick different dates.`
+                `You've already got a sale at this address on ${dayList}: ` +
+                `"${conflict.title}". Edit that one instead, or pick different days.`
             return
         }
     } catch {
@@ -114,20 +136,46 @@ async function submit() {
             address: resolved.value!.address,
             lat: resolved.value!.lat,
             lng: resolved.value!.lng,
-            start_date: startDate.value,
-            end_date: endDate.value,
-            start_time: startTime.value,
-            end_time: endTime.value,
+            // Envelope columns — the sale_dates trigger will overwrite
+            // these with min/max once we insert the rows below, but we
+            // pass matching values so the NOT NULL columns are satisfied
+            // and any reader between INSERTs sees a consistent envelope.
+            start_date: envelope.start_date,
+            end_date: envelope.end_date,
+            start_time: envelope.start_time,
+            end_time: envelope.end_time,
             photos: photos.value,
             contact_enabled: contactEnabled.value,
         })
         .select('id')
         .single()
-    saving.value = false
     if (err) {
+        saving.value = false
         error.value = err.message
         return
     }
+
+    // Bulk-insert the per-day rows. Trigger will recompute the envelope
+    // (no-op here since it already matches what we passed above).
+    const { error: dErr } = await supabase
+        .from('sale_dates')
+        .insert(
+            days.value.map((d) => ({
+                sale_id: data.id,
+                sale_date: d.date,
+                start_time: d.start_time,
+                end_time: d.end_time,
+            })),
+        )
+    saving.value = false
+    if (dErr) {
+        // Roll back the parent so the user isn't stuck with an orphaned
+        // sale_dates-less row (which would 500 the cards' time formatter).
+        await supabase.from('garage_sales').delete().eq('id', data.id)
+        error.value = `Couldn't save the schedule: ${dErr.message}`
+        return
+    }
+
     if (dupCheckFailed) {
         toast.info(
             "We couldn't verify you don't already have a sale at this address. Your post is live — please double-check 'My sales' and remove a duplicate if you spot one.",
@@ -201,57 +249,79 @@ async function submit() {
                 </p>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="start-date">
-                        Start date <span class="text-red-600">*</span>
+            <!-- Per-day schedule -->
+            <div>
+                <div class="mb-2 flex items-center justify-between">
+                    <label class="block text-sm font-medium text-gray-700">
+                        Sale schedule <span class="text-red-600">*</span>
                     </label>
-                    <input
-                        id="start-date"
-                        v-model="startDate"
-                        type="date"
-                        required
-                        :min="today"
-                        class="input mt-1"
-                    />
+                    <span class="text-xs text-gray-500">
+                        {{ days.length }} day{{ days.length === 1 ? '' : 's' }}
+                    </span>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="end-date">
-                        End date <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="end-date"
-                        v-model="endDate"
-                        type="date"
-                        required
-                        :min="startDate || today"
-                        class="input mt-1"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="start-time">
-                        Start time <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="start-time"
-                        v-model="startTime"
-                        type="time"
-                        required
-                        class="input mt-1"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="end-time">
-                        End time <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="end-time"
-                        v-model="endTime"
-                        type="time"
-                        required
-                        class="input mt-1"
-                    />
-                </div>
+                <p class="mb-3 text-xs text-gray-500">
+                    Add one row per day. Different hours each day? No problem — set them per row.
+                </p>
+
+                <ul class="space-y-3">
+                    <li
+                        v-for="(day, i) in days"
+                        :key="i"
+                        class="rounded-lg bg-white p-3 ring-1 ring-orange-100"
+                    >
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Day {{ i + 1 }}
+                            </span>
+                            <button
+                                type="button"
+                                class="text-xs text-red-600 hover:underline"
+                                :aria-label="`Remove day ${i + 1}`"
+                                @click="removeDay(i)"
+                            >
+                                {{ days.length === 1 ? 'Clear' : 'Remove' }}
+                            </button>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-3">
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">Date</span>
+                                <input
+                                    v-model="day.date"
+                                    type="date"
+                                    required
+                                    :min="today"
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">Start time</span>
+                                <input
+                                    v-model="day.start_time"
+                                    type="time"
+                                    required
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">End time</span>
+                                <input
+                                    v-model="day.end_time"
+                                    type="time"
+                                    required
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                        </div>
+                    </li>
+                </ul>
+
+                <button
+                    type="button"
+                    class="mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-orange-50 px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-orange-100"
+                    @click="addDay"
+                >
+                    + Add day
+                </button>
             </div>
 
             <div>

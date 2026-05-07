@@ -13,8 +13,7 @@ const user = useSupabaseUser()
 const { isSaved, save, unsave } = useSavedSales()
 
 const status = computed(() => saleStatus(props.sale))
-const dateRange = computed(() => formatDateRange(props.sale.start_date, props.sale.end_date))
-const timeRange = computed(() => formatTimeRange(props.sale.start_time, props.sale.end_time))
+const schedule = computed(() => summarizeSchedule(props.sale))
 
 const lightboxIndex = ref<number | null>(null)
 
@@ -79,9 +78,17 @@ async function onLetsGo() {
         </div>
 
         <p class="mt-2 text-gray-700">📍 {{ sale.address }}</p>
-        <p class="mt-1 text-gray-700">
-            📅 {{ dateRange }}<span v-if="timeRange"> · {{ timeRange }}</span>
-        </p>
+        <div class="mt-1 text-gray-700">
+            <p v-if="!schedule.hasVariation">📅 {{ schedule.compact }}</p>
+            <template v-else>
+                <p class="font-medium">📅 Schedule</p>
+                <ul class="ml-5 mt-1 space-y-0.5 text-sm">
+                    <li v-for="d in schedule.days" :key="d.date">
+                        {{ d.dateLabel }}<span v-if="d.timeLabel"> · {{ d.timeLabel }}</span>
+                    </li>
+                </ul>
+            </template>
+        </div>
 
         <div
             v-if="sale.photos && sale.photos.length"

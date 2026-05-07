@@ -49,6 +49,10 @@ const { data: savedSales, refresh: refreshSaved } = await useAsyncData(
 // Removed (soft-deleted) sales are excluded — you can't add a tombstone to a
 // route. Existing route stops that became tombstones still render with a
 // "removed" notice (see template) and are skipped in route calculations.
+//
+// "Available on this date" uses per-day matching against `sale_dates`,
+// not the envelope — a sale with non-contiguous days (Weekend 1 + 2)
+// shouldn't appear as available on the gap days inside its envelope.
 const availableSaved = computed(() => {
     if (!data.value) return []
     const inRoute = new Set(data.value.stops.map((s) => s.garage_sale_id))
@@ -56,7 +60,7 @@ const availableSaved = computed(() => {
     return (savedSales.value ?? [])
         .filter((row) => !inRoute.has(row.garage_sale_id))
         .filter((row) => !isRemovedSale(row.sale))
-        .filter((row) => row.sale.start_date <= day && day <= row.sale.end_date)
+        .filter((row) => findSaleDateOn(row.sale, day) !== null)
 })
 
 // Just the GarageSale objects for the map's available-pin prop, memoized so
@@ -473,6 +477,20 @@ function fmtDriveMin(seconds: number): string {
     return m < 1 ? '<1 min' : `${m} min`
 }
 
+/**
+ * The sale's hours specifically on this route's date — falls back to
+ * the envelope when the sale predates 0018 or has no row for this day
+ * (shouldn't happen given `availableSaved` filters by per-day match,
+ * but guards the existing-stops path where a sale's schedule may have
+ * shifted after the stop was added).
+ */
+function stopHoursOn(sale: GarageSale): string {
+    if (!data.value) return ''
+    const row = findSaleDateOn(sale, data.value.route.route_date)
+    if (row) return formatTimeRange(row.start_time, row.end_time)
+    return formatTimeRange(sale.start_time, sale.end_time)
+}
+
 const routeDateLabel = computed(() => {
     if (!data.value) return ''
     return new Date(data.value.route.route_date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -663,9 +681,8 @@ const routeDateLabel = computed(() => {
                                         {{ stop.sale.address }}
                                     </div>
                                     <div class="mt-0.5 text-xs text-gray-500">
-                                        <template v-if="stop.sale.start_time || stop.sale.end_time">
-                                            Open
-                                            {{ formatTimeRange(stop.sale.start_time, stop.sale.end_time) }}
+                                        <template v-if="stopHoursOn(stop.sale)">
+                                            Open {{ stopHoursOn(stop.sale) }}
                                         </template>
                                     </div>
                                 </div>

@@ -1,4 +1,5 @@
 import type { GarageSale } from '~/composables/useGarageSales'
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
 
 export interface Route {
     id: string
@@ -38,7 +39,7 @@ export async function fetchRouteWithStops(id: string) {
 
     const { data: stops, error: err2 } = await supabase
         .from('route_stops')
-        .select('route_id, garage_sale_id, position, sale:garage_sales(*)')
+        .select(`route_id, garage_sale_id, position, sale:garage_sales(${GARAGE_SALE_SELECT})`)
         .eq('route_id', id)
         .order('position')
     if (err2) throw err2
@@ -53,7 +54,7 @@ export async function fetchSavedSalesWithDetails() {
     const supabase = useSupabaseClient()
     const { data, error } = await supabase
         .from('saved_sales')
-        .select('garage_sale_id, created_at, sale:garage_sales!inner(*)')
+        .select(`garage_sale_id, created_at, sale:garage_sales!inner(${GARAGE_SALE_SELECT})`)
         // We DO ship expired sales (end_date < today) and tombstones
         // (deleted_at not null) so the itineraries page can render them
         // with their respective "ended" / "removed" notices instead of

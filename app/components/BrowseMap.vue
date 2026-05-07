@@ -57,8 +57,7 @@ function actionHtml(sale: GarageSale): string {
 }
 
 function buildPopupHtml(sale: GarageSale, withCloseButton: boolean): string {
-    const dates = formatDateRange(sale.start_date, sale.end_date)
-    const times = formatTimeRange(sale.start_time, sale.end_time)
+    const compact = summarizeSchedule(sale).compact
     const status = saleStatus(sale)
     const dateBadge =
         status === 'active'
@@ -85,9 +84,7 @@ function buildPopupHtml(sale: GarageSale, withCloseButton: boolean): string {
                 ${escapeHtml(sale.title)}
             </div>
             <div style="margin-top:4px;font-size:13px;color:#374151;">${escapeHtml(sale.address)}</div>
-            <div style="margin-top:6px;font-size:13px;color:#1f2937;font-weight:500;">${dates}${
-                times ? ` · ${times}` : ''
-            }</div>
+            <div style="margin-top:6px;font-size:13px;color:#1f2937;font-weight:500;">${escapeHtml(compact)}</div>
             <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 ${actionHtml(sale)}
             </div>
@@ -158,7 +155,7 @@ function scheduleHoverClose() {
             closePopup()
             emit('hover', null)
         }
-    }, 250)
+    }, 400)
 }
 
 function clearMarkers() {
@@ -177,6 +174,13 @@ function renderMarkers() {
         el.addEventListener('mouseenter', () => {
             // Don't override a persistent (clicked) popup.
             if (activePopupPersistent) return
+            // Clear any pending hover-close BEFORE emitting. If the popup
+            // for this sale is already open (cursor moved popup → pin),
+            // the parent's hoveredId ref is already this sale.id, so the
+            // ref assignment is a no-op and the watcher doesn't fire —
+            // meaning showPopup's clearHoverTimer never runs and the
+            // popup would auto-close mid-hover. Clearing here covers it.
+            clearHoverTimer()
             emit('hover', sale.id)
         })
         el.addEventListener('mouseleave', () => {

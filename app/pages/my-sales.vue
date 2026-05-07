@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GarageSale } from '~/composables/useGarageSales'
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
 
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
@@ -13,7 +14,7 @@ const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
         if (!user.value) return []
         const { data, error } = await supabase
             .from('garage_sales')
-            .select('*')
+            .select(GARAGE_SALE_SELECT)
             .eq('user_id', user.value.id)
             .is('deleted_at', null)
             .order('start_date', { ascending: false })
@@ -112,10 +113,7 @@ function statusClass(s: GarageSale): string {
                     </NuxtLink>
                     <p class="mt-0.5 truncate text-sm text-gray-600">{{ sale.address }}</p>
                     <p class="mt-0.5 text-xs text-gray-500">
-                        {{ formatDateRange(sale.start_date, sale.end_date) }}
-                        <template v-if="sale.start_time && sale.end_time">
-                            · {{ formatTimeRange(sale.start_time, sale.end_time) }}
-                        </template>
+                        {{ summarizeSchedule(sale).compact }}
                     </p>
                 </div>
                 <div class="flex flex-col gap-2">

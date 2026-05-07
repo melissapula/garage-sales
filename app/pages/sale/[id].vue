@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GarageSale, SaleOwnerStatus } from '~/composables/useGarageSales'
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
@@ -11,7 +12,7 @@ const id = route.params.id as string
 const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
     const { data, error: err } = await supabase
         .from('garage_sales')
-        .select('*')
+        .select(GARAGE_SALE_SELECT)
         .eq('id', id)
         .is('deleted_at', null)
         .maybeSingle()
@@ -27,6 +28,7 @@ const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
 
 const isOwner = computed(() => sale.value && user.value && sale.value.user_id === user.value.id)
 const status = computed(() => (sale.value ? saleStatus(sale.value) : null))
+const schedule = computed(() => (sale.value ? summarizeSchedule(sale.value) : null))
 
 const { isSaved, save, unsave, refresh: refreshSaved } = useSavedSales()
 const { deletePhotos } = useSalePhotos()
@@ -40,17 +42,11 @@ useSeoMeta({
     title: () => (sale.value ? `${sale.value.title} — Garage Sale Tracker` : 'Garage sale'),
     description: () =>
         sale.value
-            ? `${sale.value.title} at ${sale.value.address}. ${formatDateRange(sale.value.start_date, sale.value.end_date)}.`
+            ? `${sale.value.title} at ${sale.value.address}. ${schedule.value!.compact}.`
             : '',
     ogTitle: () => (sale.value ? sale.value.title : 'Garage sale'),
     ogDescription: () =>
-        sale.value
-            ? `📍 ${sale.value.address} · 📅 ${formatDateRange(sale.value.start_date, sale.value.end_date)}${
-                  sale.value.start_time && sale.value.end_time
-                      ? ` · ${formatTimeRange(sale.value.start_time, sale.value.end_time)}`
-                      : ''
-              }`
-            : '',
+        sale.value ? `📍 ${sale.value.address} · 📅 ${schedule.value!.compact}` : '',
     ogImage: () => sale.value?.photos?.[0] ?? `${config.public.siteUrl}/og-image.png`,
     ogUrl: () => shareUrl.value,
     ogType: 'website',
@@ -58,54 +54,65 @@ useSeoMeta({
 })
 
 // JSON-LD Event schema so Google can show rich event-result cards in
-// search (date, location, image inline). Built from the same sale data
-// used for the visible page; the `useHead` script tag is only emitted
-// when sale data exists (sale.value never null here post-throw, but
-// the computed guards against any transient nullability).
+// search (date, location, image inline). One Event per day in the sale's
+// schedule — Google handles arrays and a per-day shape lets a sale with
+// non-contiguous days (Weekend 1 + Weekend 2) appear as two separate
+// search-result rows on their respective dates instead of one
+// continuous misleading window.
 useHead({
     script: computed(() => {
         if (!sale.value) return []
         const s = sale.value
-        const startsAt = s.start_time
-            ? `${s.start_date}T${s.start_time}:00`
-            : s.start_date
-        const endsAt = s.end_time
-            ? `${s.end_date}T${s.end_time}:00`
-            : s.end_date
-        const ld = {
-            '@context': 'https://schema.org',
-            '@type': 'Event',
-            name: s.title,
-            description: s.description ?? `Garage sale at ${s.address}.`,
-            startDate: startsAt,
-            endDate: endsAt,
-            eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-            eventStatus:
-                s.status === 'closed'
-                    ? 'https://schema.org/EventCancelled'
-                    : 'https://schema.org/EventScheduled',
-            location: {
-                '@type': 'Place',
-                name: s.address,
-                address: s.address,
-                geo: {
-                    '@type': 'GeoCoordinates',
-                    latitude: s.lat,
-                    longitude: s.lng,
+        const days = s.sale_dates && s.sale_dates.length
+            ? [...s.sale_dates].sort((a, b) => a.sale_date.localeCompare(b.sale_date))
+            : [{ sale_date: s.start_date, start_time: s.start_time, end_time: s.end_time }]
+
+        const events = days.map((d) => {
+            const startsAt = d.start_time
+                ? `${d.sale_date}T${d.start_time}:00`
+                : d.sale_date
+            const endsAt = d.end_time
+                ? `${d.sale_date}T${d.end_time}:00`
+                : d.sale_date
+            return {
+                '@context': 'https://schema.org',
+                '@type': 'Event',
+                name: s.title,
+                description: s.description ?? `Garage sale at ${s.address}.`,
+                startDate: startsAt,
+                endDate: endsAt,
+                eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+                eventStatus:
+                    s.status === 'closed'
+                        ? 'https://schema.org/EventCancelled'
+                        : 'https://schema.org/EventScheduled',
+                location: {
+                    '@type': 'Place',
+                    name: s.address,
+                    address: s.address,
+                    geo: {
+                        '@type': 'GeoCoordinates',
+                        latitude: s.lat,
+                        longitude: s.lng,
+                    },
                 },
-            },
-            image: s.photos?.length
-                ? s.photos
-                : [`${config.public.siteUrl}/og-image.png`],
-            url: shareUrl.value,
-            organizer: {
-                '@type': 'Organization',
-                name: 'Garage Sale Tracker',
-                url: config.public.siteUrl,
-            },
-            isAccessibleForFree: true,
-        }
-        return [{ type: 'application/ld+json', innerHTML: JSON.stringify(ld) }]
+                image: s.photos?.length
+                    ? s.photos
+                    : [`${config.public.siteUrl}/og-image.png`],
+                url: shareUrl.value,
+                organizer: {
+                    '@type': 'Organization',
+                    name: 'Garage Sale Tracker',
+                    url: config.public.siteUrl,
+                },
+                isAccessibleForFree: true,
+            }
+        })
+
+        // Multi-day sales get a JSON array; single-day sales stay a
+        // single object for crawlers that don't follow the array form.
+        const payload = events.length === 1 ? events[0] : events
+        return [{ type: 'application/ld+json', innerHTML: JSON.stringify(payload) }]
     }),
 })
 
@@ -114,7 +121,7 @@ function shareToFacebook() {
     const u = encodeURIComponent(shareUrl.value)
     // FB ignores `quote` for most pages now, but include it as a hint.
     const quote = encodeURIComponent(
-        `${sale.value.title}\n📍 ${sale.value.address}\n📅 ${formatDateRange(sale.value.start_date, sale.value.end_date)}`,
+        `${sale.value.title}\n📍 ${sale.value.address}\n📅 ${schedule.value!.compact}`,
     )
     const url = `https://www.facebook.com/sharer/sharer.php?u=${u}&quote=${quote}`
     window.open(url, '_blank', 'width=626,height=436,noopener,noreferrer')
@@ -266,12 +273,17 @@ async function deleteSale() {
             </div>
 
             <p class="mt-2 text-gray-700">📍 {{ sale.address }}</p>
-            <p class="mt-1 text-gray-700">
-                📅 {{ formatDateRange(sale.start_date, sale.end_date) }}
-                <template v-if="sale.start_time || sale.end_time">
-                    · {{ formatTimeRange(sale.start_time, sale.end_time) }}
+            <div v-if="schedule" class="mt-1 text-gray-700">
+                <p v-if="!schedule.hasVariation">📅 {{ schedule.compact }}</p>
+                <template v-else>
+                    <p class="font-medium">📅 Schedule</p>
+                    <ul class="ml-5 mt-1 space-y-0.5 text-sm">
+                        <li v-for="d in schedule.days" :key="d.date">
+                            {{ d.dateLabel }}<span v-if="d.timeLabel"> · {{ d.timeLabel }}</span>
+                        </li>
+                    </ul>
                 </template>
-            </p>
+            </div>
 
             <div
                 v-if="sale.photos && sale.photos.length"

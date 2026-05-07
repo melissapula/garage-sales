@@ -17,8 +17,7 @@ const { isSaved, save, unsave } = useSavedSales()
 const toast = useToast()
 
 const status = computed(() => saleStatus(props.sale))
-const dateRange = computed(() => formatDateRange(props.sale.start_date, props.sale.end_date))
-const timeRange = computed(() => formatTimeRange(props.sale.start_time, props.sale.end_time))
+const schedule = computed(() => summarizeSchedule(props.sale))
 
 function onClick() {
     emit('select', props.sale.id)
@@ -90,7 +89,7 @@ async function onRemove(ev: Event) {
                 </h3>
                 <p class="mt-0.5 truncate text-sm text-gray-600">{{ sale.address }}</p>
                 <p class="mt-0.5 truncate text-xs text-gray-500">
-                    {{ dateRange }}<span v-if="timeRange"> · {{ timeRange }}</span>
+                    {{ schedule.compact }}
                 </p>
             </div>
         </div>

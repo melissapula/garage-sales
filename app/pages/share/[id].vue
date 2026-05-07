@@ -18,7 +18,7 @@ const { data } = await useAsyncData(`share-${id}`, async () => {
 
     const { data: stops, error: sErr } = await supabase
         .from('route_stops')
-        .select('route_id, garage_sale_id, position, sale:garage_sales(*)')
+        .select(`route_id, garage_sale_id, position, sale:garage_sales(${GARAGE_SALE_SELECT})`)
         .eq('route_id', id)
         .order('position')
     if (sErr) throw sErr
@@ -62,6 +62,13 @@ const dateLabel = computed(() =>
           })
         : '',
 )
+
+function stopHoursOn(sale: import('~/composables/useGarageSales').GarageSale): string {
+    if (!data.value) return ''
+    const row = findSaleDateOn(sale, data.value.route.route_date)
+    if (row) return formatTimeRange(row.start_time, row.end_time)
+    return formatTimeRange(sale.start_time, sale.end_time)
+}
 
 useSeoMeta({
     title: () =>
@@ -150,11 +157,10 @@ const mapsLinks = computed(() => {
                                     {{ stop.sale.address }}
                                 </div>
                                 <div
-                                    v-if="stop.sale.start_time || stop.sale.end_time"
+                                    v-if="stopHoursOn(stop.sale)"
                                     class="mt-0.5 text-xs text-gray-500"
                                 >
-                                    Open
-                                    {{ formatTimeRange(stop.sale.start_time, stop.sale.end_time) }}
+                                    Open {{ stopHoursOn(stop.sale) }}
                                 </div>
                             </div>
                         </li>

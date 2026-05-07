@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { GarageSale } from '~/composables/useGarageSales'
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
+import { emptyDay, scheduleDates, scheduleEnvelope, validateSchedule, type ScheduleDay } from '~/utils/schedule'
 
 const route = useRoute()
 const supabase = useSupabaseClient()
@@ -8,12 +10,11 @@ const router = useRouter()
 const toast = useToast()
 
 const id = route.params.id as string
-const today = todayLocalISO()
 
 const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, async () => {
     const { data, error } = await supabase
         .from('garage_sales')
-        .select('*')
+        .select(GARAGE_SALE_SELECT)
         .eq('id', id)
         .is('deleted_at', null)
         .maybeSingle()
@@ -21,7 +22,7 @@ const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, as
     if (!data) {
         throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
     }
-    return data as GarageSale
+    return data as unknown as GarageSale
 })
 
 if (existing.value && user.value && existing.value.user_id !== user.value.id) {
@@ -40,10 +41,15 @@ const resolved = ref<{ address: string; lat: number; lng: number } | null>(
           }
         : null,
 )
-const startDate = ref(existing.value?.start_date ?? '')
-const endDate = ref(existing.value?.end_date ?? '')
-const startTime = ref(existing.value?.start_time ?? '')
-const endTime = ref(existing.value?.end_time ?? '')
+const days = ref<ScheduleDay[]>(
+    existing.value && existing.value.sale_dates && existing.value.sale_dates.length
+        ? existing.value.sale_dates.map((d) => ({
+              date: d.sale_date,
+              start_time: d.start_time ?? '',
+              end_time: d.end_time ?? '',
+          }))
+        : [emptyDay()],
+)
 const photos = ref<string[]>(existing.value?.photos ?? [])
 const contactEnabled = ref<boolean>(existing.value?.contact_enabled ?? true)
 
@@ -66,19 +72,37 @@ watch(addressInput, () => {
 const validationError = computed<string | null>(() => {
     if (!title.value.trim()) return 'Add a title.'
     if (!resolved.value) return 'Find the address on the map first.'
-    if (!startDate.value) return 'Pick a start date.'
-    if (!endDate.value) return 'Pick an end date.'
-    if (endDate.value < today) return "End date can't be in the past."
-    if (endDate.value < startDate.value) return 'End date must be on or after the start date.'
-    if (!startTime.value) return 'Pick a start time.'
-    if (!endTime.value) return 'Pick an end time.'
-    if (startDate.value === endDate.value && endTime.value <= startTime.value) {
-        return 'End time must be after the start time.'
-    }
-    return null
+    // Edit allows already-past days (e.g. for a sale that's started),
+    // but requires at least one day still in the future — same intent
+    // as the legacy "end_date can't be in the past" rule.
+    return validateSchedule(days.value, { allowPastDates: true, requireFutureEnd: true })
 })
 
 const isValid = computed(() => validationError.value === null)
+
+function addDay() {
+    const dates = days.value.map((d) => d.date).filter(Boolean).sort()
+    let next = ''
+    if (dates.length) {
+        const last = new Date(dates[dates.length - 1] + 'T00:00:00')
+        last.setDate(last.getDate() + 1)
+        next = toLocalISO(last)
+    }
+    const prev = days.value[days.value.length - 1]
+    days.value.push({
+        date: next,
+        start_time: prev?.start_time ?? '',
+        end_time: prev?.end_time ?? '',
+    })
+}
+
+function removeDay(i: number) {
+    if (days.value.length === 1) {
+        days.value[0] = emptyDay()
+        return
+    }
+    days.value.splice(i, 1)
+}
 
 async function findAddress() {
     error.value = null
@@ -111,25 +135,27 @@ async function submit() {
     }
     saving.value = true
 
-    // Reject if another active sale at the same address overlaps these dates,
-    // excluding this sale itself. The retry helper tries twice; if both
-    // attempts fail we still save, but flag the user afterwards.
+    const dates = scheduleDates(days.value)
+    const envelope = scheduleEnvelope(days.value)
+
+    // Reject if another active sale at the same address shares any day
+    // with this one (excluding this sale itself). The retry helper tries
+    // twice; if both attempts fail we still save, but flag the user.
     let dupCheckFailed = false
     try {
         const conflict = await findOverlappingSaleWithRetry(
             user.value!.id,
             resolved.value!.lat,
             resolved.value!.lng,
-            startDate.value,
-            endDate.value,
+            dates,
             id,
         )
         if (conflict) {
             saving.value = false
+            const dayList = conflict.conflictDates.join(', ')
             error.value =
-                `You've already got another sale at this address overlapping these dates: ` +
-                `"${conflict.title}" (${conflict.start_date} – ${conflict.end_date}). ` +
-                `Adjust your dates, or edit that listing instead.`
+                `You've already got another sale at this address on ${dayList}: ` +
+                `"${conflict.title}". Adjust your days, or edit that listing instead.`
             return
         }
     } catch {
@@ -144,19 +170,61 @@ async function submit() {
             address: resolved.value!.address,
             lat: resolved.value!.lat,
             lng: resolved.value!.lng,
-            start_date: startDate.value,
-            end_date: endDate.value,
-            start_time: startTime.value,
-            end_time: endTime.value,
+            // Envelope columns — the sale_dates trigger will overwrite
+            // these with min/max once we sync the rows below. Passing
+            // them here keeps the row consistent in the brief moment
+            // between the parent UPDATE and the sale_dates writes.
+            start_date: envelope.start_date,
+            end_date: envelope.end_date,
+            start_time: envelope.start_time,
+            end_time: envelope.end_time,
             photos: photos.value,
             contact_enabled: contactEnabled.value,
         })
         .eq('id', id)
-    saving.value = false
     if (err) {
+        saving.value = false
         error.value = err.message
         return
     }
+
+    // Sync the per-day rows: delete any days the user removed, then
+    // upsert the current set (handles both unchanged days, time edits,
+    // and brand-new days).
+    const oldDates = new Set(
+        (existing.value?.sale_dates ?? []).map((d) => d.sale_date),
+    )
+    const newDates = new Set(dates)
+    const toRemove = [...oldDates].filter((d) => !newDates.has(d))
+    if (toRemove.length) {
+        const { error: delErr } = await supabase
+            .from('sale_dates')
+            .delete()
+            .eq('sale_id', id)
+            .in('sale_date', toRemove)
+        if (delErr) {
+            saving.value = false
+            error.value = `Couldn't remove old days: ${delErr.message}`
+            return
+        }
+    }
+    const { error: upErr } = await supabase
+        .from('sale_dates')
+        .upsert(
+            days.value.map((d) => ({
+                sale_id: id,
+                sale_date: d.date,
+                start_time: d.start_time,
+                end_time: d.end_time,
+            })),
+            { onConflict: 'sale_id,sale_date' },
+        )
+    saving.value = false
+    if (upErr) {
+        error.value = `Couldn't save the schedule: ${upErr.message}`
+        return
+    }
+
     // Now that the new photos[] is persisted, commit any storage deletes
     // the user staged via the photo uploader's "X" button.
     await photoUploaderRef.value?.commitPendingDeletes()
@@ -225,56 +293,78 @@ async function submit() {
                 </p>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="start-date">
-                        Start date <span class="text-red-600">*</span>
+            <!-- Per-day schedule -->
+            <div>
+                <div class="mb-2 flex items-center justify-between">
+                    <label class="block text-sm font-medium text-gray-700">
+                        Sale schedule <span class="text-red-600">*</span>
                     </label>
-                    <input
-                        id="start-date"
-                        v-model="startDate"
-                        type="date"
-                        required
-                        class="input mt-1"
-                    />
+                    <span class="text-xs text-gray-500">
+                        {{ days.length }} day{{ days.length === 1 ? '' : 's' }}
+                    </span>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="end-date">
-                        End date <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="end-date"
-                        v-model="endDate"
-                        type="date"
-                        required
-                        :min="startDate || today"
-                        class="input mt-1"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="start-time">
-                        Start time <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="start-time"
-                        v-model="startTime"
-                        type="time"
-                        required
-                        class="input mt-1"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700" for="end-time">
-                        End time <span class="text-red-600">*</span>
-                    </label>
-                    <input
-                        id="end-time"
-                        v-model="endTime"
-                        type="time"
-                        required
-                        class="input mt-1"
-                    />
-                </div>
+                <p class="mb-3 text-xs text-gray-500">
+                    Add one row per day. Different hours each day? No problem — set them per row.
+                </p>
+
+                <ul class="space-y-3">
+                    <li
+                        v-for="(day, i) in days"
+                        :key="i"
+                        class="rounded-lg bg-white p-3 ring-1 ring-orange-100"
+                    >
+                        <div class="mb-2 flex items-center justify-between">
+                            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                Day {{ i + 1 }}
+                            </span>
+                            <button
+                                type="button"
+                                class="text-xs text-red-600 hover:underline"
+                                :aria-label="`Remove day ${i + 1}`"
+                                @click="removeDay(i)"
+                            >
+                                {{ days.length === 1 ? 'Clear' : 'Remove' }}
+                            </button>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-3">
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">Date</span>
+                                <input
+                                    v-model="day.date"
+                                    type="date"
+                                    required
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">Start time</span>
+                                <input
+                                    v-model="day.start_time"
+                                    type="time"
+                                    required
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                            <label class="block">
+                                <span class="block text-xs text-gray-600">End time</span>
+                                <input
+                                    v-model="day.end_time"
+                                    type="time"
+                                    required
+                                    class="input mt-1 !min-h-[40px] !text-sm"
+                                />
+                            </label>
+                        </div>
+                    </li>
+                </ul>
+
+                <button
+                    type="button"
+                    class="mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-dashed border-brand-400 bg-orange-50 px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-orange-100"
+                    @click="addDay"
+                >
+                    + Add day
+                </button>
             </div>
 
             <div>
