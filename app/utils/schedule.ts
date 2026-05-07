@@ -12,8 +12,16 @@ export interface ScheduleDay {
     end_time: string
 }
 
+/**
+ * Defaults for a fresh day row. 9 AM – 5 PM matches the typical garage
+ * sale window and means most posts can submit after just picking a date.
+ * Sellers with different hours overwrite per row.
+ */
+const DEFAULT_START_TIME = '09:00'
+const DEFAULT_END_TIME = '17:00'
+
 export function emptyDay(date = ''): ScheduleDay {
-    return { date, start_time: '', end_time: '' }
+    return { date, start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME }
 }
 
 export interface ScheduleValidationOptions {
