@@ -9,6 +9,11 @@ const unreadCount = unread.count
 const route = useRoute()
 const menuOpen = ref(false)
 
+// Sign the user out after 1 hour of mouse / keyboard / touch / scroll
+// inactivity. Layout-level so it covers every page; the composable is
+// a no-op when no user is signed in.
+useIdleSignout()
+
 // Close mobile menu on every navigation.
 watch(() => route.fullPath, () => {
     menuOpen.value = false

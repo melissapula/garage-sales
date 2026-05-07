@@ -18,6 +18,7 @@ const loading = ref(false)
 const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
 
 const justConfirmed = computed(() => route.query.confirmed === '1')
+const signedOutForIdle = computed(() => route.query.idle === '1')
 const passwordType = computed(() => (showPassword.value ? 'text' : 'password'))
 const canSubmit = computed(
     () =>
@@ -70,6 +71,14 @@ async function submit() {
         >
             <p class="font-medium">Email confirmed!</p>
             <p class="mt-1">Sign in below to continue.</p>
+        </div>
+
+        <div
+            v-if="signedOutForIdle"
+            class="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800"
+        >
+            <p class="font-medium">You've been signed out for inactivity.</p>
+            <p class="mt-1">Sign in again to pick up where you left off.</p>
         </div>
 
         <form class="mt-8 space-y-4" @submit.prevent="submit">
