@@ -41,6 +41,7 @@ Brand:
     - `0015_message_notifications.sql` — `message_notifications` claim table for idempotent email sends in `/api/notifications/message`
     - `0016_thread_create_buyer_only.sql` — tightens `find_or_create_thread` so only buyers can initiate (caller must not be the sale owner; the other party must be the sale owner)
     - `0017_soft_delete_garage_sales.sql` — `garage_sales.deleted_at` for soft-delete tombstones; cron also purges tombstones older than 30 days
+    - `0018_sale_dates.sql` — child `sale_dates` table (one row per day, per-day `start_time`/`end_time`); backfills existing sales; envelope trigger keeps `garage_sales.start_date`/`end_date`/`start_time`/`end_time` synced as min/max over the rows
 4. In Supabase, enable email confirmation OR manually confirm your test user under **Authentication → Users**.
 5. `npm run dev` and open http://localhost:3000
 
