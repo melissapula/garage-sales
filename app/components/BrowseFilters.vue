@@ -9,6 +9,9 @@ import {
 const props = defineProps<{
     sales: GarageSale[]
     modelValue: BrowseFiltersValue
+    /** Sales matching the current filters — passed in so the header can
+     *  show a live count. Single source of truth lives in the parent. */
+    filteredCount: number
 }>()
 
 const emit = defineEmits<{
@@ -159,7 +162,12 @@ function clearAll() {
 <template>
     <div class="space-y-5 rounded-xl bg-white p-4 ring-1 ring-orange-100">
         <div class="flex items-center justify-between">
-            <h2 class="font-display text-lg font-bold text-gray-900">Filters</h2>
+            <div class="flex items-baseline gap-2">
+                <h2 class="font-display text-lg font-bold text-gray-900">Filters</h2>
+                <span class="text-xs text-gray-500">
+                    · {{ filteredCount }} {{ filteredCount === 1 ? 'match' : 'matches' }}
+                </span>
+            </div>
             <button
                 v-if="hasFilters"
                 class="text-xs text-sky-700 hover:underline"

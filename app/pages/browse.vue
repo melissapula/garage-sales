@@ -252,7 +252,11 @@ const upcomingCount = computed(
         >
             <!-- LEFT: Filters -->
             <aside :class="{ 'hidden lg:block': mobileTab !== 'filters' }">
-                <BrowseFilters v-model="filters" :sales="sales ?? []" />
+                <BrowseFilters
+                    v-model="filters"
+                    :sales="sales ?? []"
+                    :filtered-count="filteredSales.length"
+                />
             </aside>
 
             <!-- MIDDLE: list or detail -->
