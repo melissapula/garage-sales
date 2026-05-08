@@ -104,7 +104,15 @@ onMounted(async () => {
                 const msg = payload.new as Message
                 if (!data.value) return
                 if (data.value.messages.some((m) => m.id === msg.id)) return
-                data.value.messages.push(msg)
+                // Replace the wrapper instead of `.push` — useAsyncData
+                // returns a non-shallow ref, and the immutable update
+                // matches the togglePublic refactor pattern (avoids any
+                // race with a concurrent refresh() silently overwriting
+                // a push). Same shape Vue 3 expects for ref reactivity.
+                data.value = {
+                    ...data.value,
+                    messages: [...data.value.messages, msg],
+                }
                 scrollToBottom()
                 if (msg.sender_id !== user.value?.id) {
                     await markThreadRead(id)

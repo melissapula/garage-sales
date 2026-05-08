@@ -51,10 +51,11 @@ const confirmButtonClass = computed(() => {
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
             role="dialog"
             aria-modal="true"
+            aria-labelledby="confirm-modal-title"
             @click.self="answer(false)"
         >
             <div class="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
-                <h3 class="font-display text-lg font-bold text-gray-900">
+                <h3 id="confirm-modal-title" class="font-display text-lg font-bold text-gray-900">
                     {{ pending.options.title }}
                 </h3>
                 <p
