@@ -90,12 +90,22 @@ function sortSaleDates(sales: GarageSale[]): GarageSale[] {
 
 export async function fetchActiveSales() {
     const supabase = useSupabaseClient()
-    const today = todayLocalISO()
+    // Generous cutoff: 1 day before "today" in whichever timezone is
+    // running this fetch. SSR runs on Vercel in UTC; a user in CT at
+    // 8pm local (1am UTC next day) would otherwise lose any sale ending
+    // today, because the server's "today" is one calendar day ahead of
+    // theirs. Returning yesterday-UTC's sales too lets the client-side
+    // expiry filter in /browse trim with the user's actual local clock.
+    // Cost: a handful of extra rows (yesterday's sales, capped at the
+    // sales-with-end_date-yesterday set).
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const cutoff = toLocalISO(yesterday)
     const { data, error } = await supabase
         .from('garage_sales')
         .select(GARAGE_SALE_SELECT)
         .is('deleted_at', null)
-        .gte('end_date', today)
+        .gte('end_date', cutoff)
         .neq('status', 'closed')
         .order('start_date', { ascending: true })
     if (error) throw error

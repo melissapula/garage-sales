@@ -23,12 +23,57 @@ const { data: sales, pending, error, refresh } = await useAsyncData('active-sale
     fetchActiveSales(),
 )
 
+// Track when the data was last fetched so we can self-heal stale tabs.
+const lastFetchedAt = ref(Date.now())
+async function refreshSales() {
+    await refresh()
+    lastFetchedAt.value = Date.now()
+}
+
 onMounted(refreshSaved)
 watch(user, refreshSaved)
 
-// Filters
+// Reactive "today" so the client-side expiry filter below re-evaluates
+// when the date rolls over while the tab is open. Bumped every time the
+// tab regains focus, plus a 5-minute heartbeat as a safety net for
+// always-foregrounded tabs (kiosks, single-tab users). The visibility
+// handler also kicks off a data refresh if the cached payload is older
+// than 5 minutes — covers the "left /browse open Wednesday, came back
+// Friday" path that was leaking expired sales.
+const today = ref(todayLocalISO())
+const STALE_MS = 5 * 60 * 1000
+let heartbeat: ReturnType<typeof setInterval> | null = null
+function refreshToday() {
+    today.value = todayLocalISO()
+}
+function onVisibility() {
+    if (document.visibilityState !== 'visible') return
+    refreshToday()
+    if (Date.now() - lastFetchedAt.value > STALE_MS) refreshSales()
+}
+onMounted(() => {
+    if (typeof document === 'undefined') return
+    document.addEventListener('visibilitychange', onVisibility)
+    heartbeat = setInterval(refreshToday, STALE_MS)
+})
+onBeforeUnmount(() => {
+    if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility)
+    }
+    if (heartbeat) clearInterval(heartbeat)
+})
+
+// Filters. Defensive expiry check on top of fetchActiveSales' DB
+// filter — covers stale cached payloads (Nuxt useAsyncData returns the
+// SSR result on revisit) and SSR-vs-client timezone drift (Vercel runs
+// in UTC; a CT user before midnight CT but after midnight UTC would
+// otherwise see sales the server marked as still-active).
 const filters = ref<BrowseFiltersValue>(emptyFilters())
-const filteredSales = computed(() => applyFilters(sales.value ?? [], filters.value))
+const activeSales = computed(() => {
+    const todayDate = new Date(today.value + 'T00:00:00')
+    return (sales.value ?? []).filter((s) => !isExpiredSale(s, todayDate))
+})
+const filteredSales = computed(() => applyFilters(activeSales.value, filters.value))
 
 // Selection / hover state
 const selectedId = ref<string | null>(null)
@@ -224,7 +269,7 @@ const upcomingCount = computed(
             <button
                 class="text-sm text-sky-700 hover:underline"
                 :disabled="pending"
-                @click="refresh()"
+                @click="refreshSales()"
             >
                 {{ pending ? 'Refreshing…' : 'Refresh' }}
             </button>
