@@ -140,6 +140,17 @@ async function copyLink() {
 }
 
 const lightboxIndex = ref<number | null>(null)
+const reportOpen = ref(false)
+function openReport() {
+    if (!user.value) {
+        navigateTo(`/login?redirect=/sale/${id}`)
+        return
+    }
+    reportOpen.value = true
+}
+function onReportSubmitted() {
+    toast.success("Thanks — we'll take a look.")
+}
 
 const updatingStatus = ref(false)
 const statusError = ref<string | null>(null)
@@ -273,6 +284,9 @@ async function deleteSale() {
             </div>
 
             <p class="mt-2 text-gray-700">📍 {{ sale.address }}</p>
+            <p class="mt-1 text-xs italic text-gray-500">
+                Posted by a community member — confirm details before driving over.
+            </p>
             <div v-if="schedule" class="mt-1 text-gray-700">
                 <p v-if="!schedule.hasVariation">📅 {{ schedule.compact }}</p>
                 <template v-else>
@@ -349,7 +363,23 @@ async function deleteSale() {
                         Delete
                     </button>
                 </template>
+
+                <button
+                    v-if="user && !isOwner"
+                    type="button"
+                    class="ml-auto text-xs text-gray-500 hover:text-red-700 hover:underline"
+                    @click="openReport"
+                >
+                    🚩 Report
+                </button>
             </div>
+
+            <ReportSaleModal
+                v-if="sale"
+                v-model:open="reportOpen"
+                :sale-id="sale.id"
+                @submitted="onReportSubmitted"
+            />
 
             <!-- Owner status pills -->
             <div

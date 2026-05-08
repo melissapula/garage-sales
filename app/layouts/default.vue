@@ -285,6 +285,10 @@ async function signOut() {
                 <div>
                     <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
                     <p class="mt-1 text-xs text-gray-500">
+                        Sales are posted by community members. We don't verify listings —
+                        please use your judgment when visiting an address you've never been to.
+                    </p>
+                    <p class="mt-1 text-xs text-gray-500">
                         This app is still evolving. Got a feature request or bug?
                         <a
                             href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"

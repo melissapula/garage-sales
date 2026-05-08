@@ -160,6 +160,9 @@ export default defineNuxtConfig({
         // Server-only secrets (never exposed to the browser).
         resendApiKey: process.env.RESEND_API_KEY,
         emailFrom: process.env.EMAIL_FROM || 'Garage Sale Tracker <noreply@frulahomes.com>',
+        // Where /api/sale-reports sends user-flagged listings. Override
+        // via env in prod once you have a dedicated abuse@ inbox.
+        adminEmail: process.env.ADMIN_EMAIL || 'missap1214@gmail.com',
         public: {
             mapboxToken: process.env.MAPBOX_TOKEN,
             siteUrl: process.env.PUBLIC_SITE_URL || 'http://localhost:3000',
