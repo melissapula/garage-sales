@@ -139,8 +139,28 @@ function clearLocation() {
     emit('update:modelValue', { ...props.modelValue, location: null })
 }
 
-function setRadius(miles: number) {
+// Radius slider uses a local ref for the visual value so the thumb
+// follows the cursor instantly during drag, and a debounced emit so
+// the parent's filteredSales / map re-render doesn't fire on every
+// pixel of drag. Each native `input` event would otherwise rerun
+// applyFilters across all sales, the BrowseMap signature watcher,
+// and the cards list — visible as a Poor INP score in production.
+const localRadius = ref(props.modelValue.radiusMiles)
+watch(() => props.modelValue.radiusMiles, (next) => {
+    if (next !== localRadius.value) localRadius.value = next
+})
+const debouncedEmitRadius = useDebounceFn((miles: number) => {
+    // Guard against a stale queued value: if the user clicked "Clear
+    // all" (which resets the parent and re-syncs localRadius via the
+    // watcher above) between the drag and the debounce firing, the
+    // queued `miles` would race-undo the reset. Only emit if it still
+    // matches the current intent.
+    if (miles !== localRadius.value) return
     emit('update:modelValue', { ...props.modelValue, radiusMiles: miles })
+}, 120)
+function setRadius(miles: number) {
+    localRadius.value = miles
+    debouncedEmitRadius(miles)
 }
 
 // =============================================================================
@@ -233,7 +253,7 @@ function clearAll() {
                 <div class="mb-1.5 flex items-baseline justify-between text-xs text-gray-600">
                     <span>Within</span>
                     <span class="font-semibold text-gray-900">
-                        {{ modelValue.radiusMiles }} mi
+                        {{ localRadius }} mi
                     </span>
                 </div>
                 <input
@@ -242,7 +262,7 @@ function clearAll() {
                     max="100"
                     step="5"
                     class="w-full accent-brand-500"
-                    :value="modelValue.radiusMiles"
+                    :value="localRadius"
                     :disabled="!modelValue.location"
                     @input="
                         setRadius(

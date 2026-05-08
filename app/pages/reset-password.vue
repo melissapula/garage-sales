@@ -21,8 +21,27 @@ onMounted(async () => {
 const passwordTooShort = computed(
     () => password.value.length > 0 && password.value.length < 8,
 )
+// Only show the mismatch message after the user has tabbed/clicked away
+// from the confirm field. Re-rendering "passwords don't match" on every
+// keystroke is jarring (the user is mid-typing, of course it doesn't
+// match yet) and was the slowest INP measurement in our analytics —
+// each keystroke forced a re-render of the conditional <p>. Blur-gating
+// makes the message accurate and cuts the per-keystroke render cost.
+const passwordConfirmTouched = ref(false)
+function onConfirmBlur() {
+    passwordConfirmTouched.value = true
+}
+function onConfirmFocus() {
+    // Hide the message again once the user comes back to fix it; we
+    // don't want stale "doesn't match" sitting under an actively edited
+    // field. Re-shows on next blur.
+    passwordConfirmTouched.value = false
+}
 const passwordsMismatch = computed(
-    () => passwordConfirm.value.length > 0 && password.value !== passwordConfirm.value,
+    () =>
+        passwordConfirmTouched.value &&
+        passwordConfirm.value.length > 0 &&
+        password.value !== passwordConfirm.value,
 )
 const canSubmit = computed(
     () =>
@@ -102,6 +121,8 @@ async function submit() {
                     autocomplete="new-password"
                     required
                     class="input mt-1"
+                    @blur="onConfirmBlur"
+                    @focus="onConfirmFocus"
                 />
                 <p
                     v-if="passwordsMismatch"
