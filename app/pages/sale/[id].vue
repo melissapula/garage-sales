@@ -59,6 +59,12 @@ useSeoMeta({
 // non-contiguous days (Weekend 1 + Weekend 2) appear as two separate
 // search-result rows on their respective dates instead of one
 // continuous misleading window.
+//
+// Note: `innerHTML` here is a Nuxt useHead meta-script payload
+// (JSON.stringify output, never user-rendered DOM), so the
+// "no v-html" rule for user content doesn't apply. JSON.stringify
+// already escapes the relevant characters for safe `<script>` body
+// injection of well-formed JSON-LD.
 useHead({
     script: computed(() => {
         if (!sale.value) return []

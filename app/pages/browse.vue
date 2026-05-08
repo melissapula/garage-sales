@@ -71,7 +71,12 @@ async function onLetsGo(saleId: string) {
 // aren't stuck forever:
 //   - granted: keep coords for 7 days, then re-ask
 //   - denied: keep the "no" for 24h, then re-ask
-const LOCATION_KEY = 'gst:user-location'
+//
+// Key is namespaced by user id (or 'anon') so a shared device doesn't
+// leak user A's coords to user B's first browse after sign-out.
+function locationKey(): string {
+    return `gst:user-location:${user.value?.id ?? 'anon'}`
+}
 const GRANTED_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DENIED_TTL_MS = 24 * 60 * 60 * 1000
 type CachedLocation =
@@ -82,14 +87,14 @@ const userCenter = ref<[number, number] | null>(null)
 function readLocationCache(): CachedLocation | null {
     if (typeof localStorage === 'undefined') return null
     try {
-        const raw = localStorage.getItem(LOCATION_KEY)
+        const raw = localStorage.getItem(locationKey())
         if (!raw) return null
         const cached = JSON.parse(raw) as CachedLocation
         const age = Date.now() - (cached.ts ?? 0)
         const ttl = cached.granted ? GRANTED_TTL_MS : DENIED_TTL_MS
         if (age > ttl) {
             // Stale — drop it so we re-prompt and refresh the coords.
-            localStorage.removeItem(LOCATION_KEY)
+            localStorage.removeItem(locationKey())
             return null
         }
         return cached
@@ -142,10 +147,10 @@ onMounted(async () => {
         userCenter.value = [pos.lng, pos.lat]
         applyUserLocationToFilter(pos.lng, pos.lat)
         const entry: CachedLocation = { asked: true, granted: true, lng: pos.lng, lat: pos.lat, ts: Date.now() }
-        localStorage.setItem(LOCATION_KEY, JSON.stringify(entry))
+        localStorage.setItem(locationKey(), JSON.stringify(entry))
     } catch {
         const entry: CachedLocation = { asked: true, granted: false, ts: Date.now() }
-        try { localStorage.setItem(LOCATION_KEY, JSON.stringify(entry)) } catch { /* ignore */ }
+        try { localStorage.setItem(locationKey(), JSON.stringify(entry)) } catch { /* ignore */ }
     }
 })
 

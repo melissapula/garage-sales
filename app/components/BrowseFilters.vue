@@ -54,21 +54,19 @@ function applyPresetToday() {
 
 function applyPresetThisWeekend() {
     // "This weekend" = the upcoming Saturday + Sunday, OR today + tomorrow
-    // when today is Saturday or Sunday.
+    // when today is Saturday or Sunday. Past code had empty Sun/Sat
+    // branches that worked by accident — this version is explicit.
     const now = new Date()
     const dow = now.getDay() // 0 Sun, 6 Sat
     const start = new Date(now)
-    if (dow === 0) {
-        // It's Sunday — show Sun only.
-        // (start = today, end = today)
-    } else if (dow === 6) {
-        // Saturday — show Sat–Sun.
-    } else {
-        // Mon–Fri — jump to upcoming Saturday.
+    // Mon–Fri (1..5): jump forward to the upcoming Saturday.
+    // Sat (6) + Sun (0): start on today.
+    if (dow >= 1 && dow <= 5) {
         start.setDate(now.getDate() + (6 - dow))
     }
     const end = new Date(start)
-    if (start.getDay() === 6) end.setDate(start.getDate() + 1) // Sat → end Sun
+    // If start is Saturday, extend to Sunday. If start is Sunday, single day.
+    if (start.getDay() === 6) end.setDate(start.getDate() + 1)
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { start: toLocalISO(start), end: toLocalISO(end) },
@@ -265,9 +263,10 @@ function clearAll() {
                     :value="localRadius"
                     :disabled="!modelValue.location"
                     @input="
-                        setRadius(
-                            parseInt(($event.target as HTMLInputElement).value, 10),
-                        )
+                        (() => {
+                            const v = Number(($event.target as HTMLInputElement).value)
+                            if (Number.isFinite(v)) setRadius(v)
+                        })()
                     "
                 />
                 <div class="mt-1 flex justify-between text-[10px] text-gray-400">

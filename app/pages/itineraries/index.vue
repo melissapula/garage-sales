@@ -114,13 +114,7 @@ const displayedSavedSales = computed(() =>
                     v-for="row in displayedSavedSales"
                     :key="row.garage_sale_id"
                     class="flex items-start gap-3 rounded-xl p-3 ring-1"
-                    :class="
-                        isRemovedSale(row.sale)
-                            ? 'bg-red-50 ring-red-200'
-                            : isExpiredSale(row.sale)
-                                ? 'bg-yellow-50 ring-yellow-200'
-                                : 'bg-white ring-orange-100'
-                    "
+                    :class="saleRowToneClasses(row.sale)"
                 >
                     <div class="flex-1">
                         <p

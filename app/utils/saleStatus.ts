@@ -17,6 +17,20 @@ export function isExpiredSale(sale: SaleDates, today = new Date()): boolean {
     return saleStatus(sale, today) === 'past'
 }
 
+/**
+ * Tailwind classes for the row container of a saved-sale / route-stop
+ * list item. Centralizes the tombstone (red) / expired (yellow) /
+ * normal (white) tone so /itineraries/index.vue and
+ * /itineraries/[id].vue stay in sync as the styling evolves.
+ */
+export function saleRowToneClasses(
+    sale: SaleDates & { deleted_at?: string | null },
+): string {
+    if (isRemovedSale(sale)) return 'bg-red-50 ring-red-200'
+    if (isExpiredSale(sale)) return 'bg-yellow-50 ring-yellow-200'
+    return 'bg-white ring-orange-100'
+}
+
 export function pinColor(status: SaleStatus): string {
     if (status === 'active') return '#22C55E'
     if (status === 'upcoming') return '#EAB308'

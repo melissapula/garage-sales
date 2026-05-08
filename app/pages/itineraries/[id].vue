@@ -607,13 +607,7 @@ const routeDateLabel = computed(() => {
                         <template #item="{ element: stop, index: i }">
                             <li
                                 class="flex items-start gap-3 rounded-xl p-3 ring-1"
-                                :class="
-                                    isRemovedSale(stop.sale)
-                                        ? 'bg-red-50 ring-red-200'
-                                        : isExpiredSale(stop.sale)
-                                            ? 'bg-yellow-50 ring-yellow-200'
-                                            : 'bg-white ring-orange-100'
-                                "
+                                :class="saleRowToneClasses(stop.sale)"
                             >
                                 <button
                                     type="button"

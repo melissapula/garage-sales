@@ -48,13 +48,20 @@ export function useIdleSignout(timeoutMs: number = ONE_HOUR_MS) {
         signingOut = true
         try {
             await supabase.auth.signOut()
+            // Release the guard *before* navigation. If router.push
+            // hangs or throws, a fresh idle cycle / user activity
+            // shouldn't be permanently locked out of triggering future
+            // checks. signOut already succeeded; the guard's job is
+            // done.
+            signingOut = false
             // Layout's user-watcher will react too, but explicitly
             // routing to /login means a user idle on /post or /inbox
             // doesn't end up looking at a logged-out shell of the same
             // page after the auth state flips.
             await router.push({ path: '/login', query: { idle: '1' } })
-        } finally {
+        } catch (e) {
             signingOut = false
+            console.error('[useIdleSignout] signout failed:', e)
         }
     }
 

@@ -21,17 +21,60 @@ onMounted(() => {
         .on(
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'messages' },
-            () => {
-                // Refetch the threads list so a brand-new conversation
-                // shows up. The navbar unread badge is updated via deltas
-                // in the layout channel, so we don't refetch the count.
-                refresh()
+            (payload) => {
+                // Most messages land in a thread we already have on
+                // screen — update that row in place instead of a full
+                // fetchInbox round-trip (which re-runs an N-row profile
+                // join + the unread-counts RPC). Only fall back to
+                // refresh() for a brand-new thread that wasn't in our
+                // list before.
+                const m = payload.new as {
+                    id?: string
+                    thread_id?: string
+                    sender_id?: string
+                    body?: string
+                    created_at?: string
+                }
+                if (
+                    typeof m?.id !== 'string' ||
+                    typeof m.thread_id !== 'string' ||
+                    typeof m.sender_id !== 'string' ||
+                    typeof m.body !== 'string' ||
+                    typeof m.created_at !== 'string'
+                ) {
+                    refresh()
+                    return
+                }
+                const list = threads.value
+                if (!list) {
+                    refresh()
+                    return
+                }
+                const existing = list.find((t) => t.id === m.thread_id)
+                if (!existing) {
+                    // New thread for this user — fetch to pull in the
+                    // other-participant profile + sale relation.
+                    refresh()
+                    return
+                }
+                existing.last_message_preview = m.body.slice(0, 100)
+                existing.last_message_at = m.created_at
+                if (m.sender_id !== user.value?.id) {
+                    existing.unreadCount = (existing.unreadCount ?? 0) + 1
+                }
+                // Re-sort so the freshly-active thread floats to the top.
+                threads.value = [
+                    existing,
+                    ...list.filter((t) => t.id !== m.thread_id),
+                ]
             },
         )
         .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'message_threads' },
             () => {
+                // Catches edge cases the messages-INSERT path doesn't
+                // (hide/unhide flips, etc.). Rare; full refresh is fine.
                 refresh()
             },
         )

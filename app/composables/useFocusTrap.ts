@@ -71,6 +71,18 @@ export function useFocusTrap(
             // we read its focusable children.
             nextTick(() => {
                 if (!containerRef.value) return
+                // Honor an explicit `data-autofocus` first — a modal
+                // can mark its first *meaningful* control (e.g. a
+                // reason <select>) so the user lands on the input
+                // they'll act on, not the close-X. Falls back to the
+                // first focusable, then the container itself.
+                const auto = containerRef.value.querySelector<HTMLElement>(
+                    '[data-autofocus]',
+                )
+                if (auto && auto.offsetParent !== null && !auto.hasAttribute('aria-hidden')) {
+                    auto.focus()
+                    return
+                }
                 const focusable = focusableWithin(containerRef.value)
                 if (focusable.length > 0) focusable[0]!.focus()
                 else containerRef.value.focus()

@@ -101,7 +101,21 @@ onMounted(async () => {
                 filter: `thread_id=eq.${id}`,
             },
             async (payload) => {
-                const msg = payload.new as Message
+                // Runtime shape check on the realtime payload before
+                // we trust it as a Message — Supabase's payload type is
+                // generic, and a future schema/version change shouldn't
+                // silently corrupt the messages array.
+                const raw = payload.new as Partial<Message> | undefined
+                if (
+                    !raw ||
+                    typeof raw.id !== 'string' ||
+                    typeof raw.body !== 'string' ||
+                    typeof raw.sender_id !== 'string'
+                ) {
+                    console.warn('[inbox] unexpected realtime payload shape:', payload.new)
+                    return
+                }
+                const msg = raw as Message
                 if (!data.value) return
                 if (data.value.messages.some((m) => m.id === msg.id)) return
                 // Replace the wrapper instead of `.push` — useAsyncData

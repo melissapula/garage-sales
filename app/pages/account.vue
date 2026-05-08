@@ -80,8 +80,13 @@ async function purgeUserPhotos(userId: string) {
     // single-page list cap is 1000, so loop until a partial / empty page
     // confirms we've drained the folder. Otherwise a power user with
     // >1000 photos would leave orphans.
+    //
+    // Capped at 20 iterations (= 20,000 photos) so a pathological case
+    // — e.g. a partial-failure delete that keeps the page full and
+    // never shrinks — can't spin forever blocking account deletion.
     const PAGE = 1000
-    while (true) {
+    const MAX_ITERATIONS = 20
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
         const { data: files } = await supabase.storage
             .from('sale-photos')
             .list(userId, { limit: PAGE })
@@ -90,6 +95,9 @@ async function purgeUserPhotos(userId: string) {
         await supabase.storage.from('sale-photos').remove(paths)
         if (files.length < PAGE) return
     }
+    console.warn(
+        '[purgeUserPhotos] hit iteration cap; some photos may remain in storage',
+    )
 }
 
 function cancelDelete() {

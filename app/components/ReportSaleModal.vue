@@ -126,6 +126,7 @@ async function submit() {
                         id="report-reason"
                         v-model="reason"
                         required
+                        data-autofocus
                         class="input mt-1 !min-h-[40px]"
                     >
                         <option value="" disabled>Pick one…</option>
