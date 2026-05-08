@@ -282,7 +282,22 @@ const upcomingCount = computed(
                         v-if="filteredSales.length === 0"
                         class="rounded-xl bg-white p-6 text-center text-sm text-gray-600 ring-1 ring-orange-100"
                     >
-                        No sales match these filters.
+                        <template v-if="sales && sales.length > 0">
+                            <p>No sales match these filters.</p>
+                            <button
+                                type="button"
+                                class="mt-2 text-sky-700 hover:underline"
+                                @click="filters = emptyFilters()"
+                            >
+                                Clear all filters
+                            </button>
+                        </template>
+                        <template v-else>
+                            <p>No garage sales posted in your area yet.</p>
+                            <NuxtLink to="/post" class="mt-1 inline-block text-sky-700 hover:underline">
+                                Be the first — post a sale
+                            </NuxtLink>
+                        </template>
                     </div>
                     <BrowseSaleCard
                         v-for="sale in filteredSales"
@@ -304,7 +319,7 @@ const upcomingCount = computed(
                 class="relative min-h-screen lg:min-h-[60vh]"
             >
                 <ClientOnly>
-                    <BrowseMap
+                    <LazyBrowseMap
                         :sales="filteredSales"
                         :selected-id="selectedId"
                         :hovered-id="hoveredId"

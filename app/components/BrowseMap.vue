@@ -74,7 +74,7 @@ function buildPopupHtml(sale: GarageSale, withCloseButton: boolean): string {
     const ownerBadge =
         sale.status === 'open'
             ? ''
-            : `<span style="${ownerToneStyles[ownerOpt.tone] || ''}padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px;">${ownerOpt.icon} ${ownerOpt.short}</span>`
+            : `<span title="${escapeHtml(ownerOpt.description)}" style="${ownerToneStyles[ownerOpt.tone] || ''}padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px;cursor:help;">${ownerOpt.icon} ${ownerOpt.short}</span>`
     const badge = `${dateBadge}${ownerBadge ? ' ' + ownerBadge : ''}`
     const closeBtn = withCloseButton
         ? `<button type="button" data-popup-close style="position:absolute;top:6px;right:6px;width:24px;height:24px;border:0;background:transparent;cursor:pointer;color:#9ca3af;font-size:20px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;" aria-label="Close">×</button>`

@@ -79,6 +79,7 @@ async function onRemove(ev: Event) {
                         v-if="sale.status !== 'open'"
                         class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
                         :class="statusBadgeClass(sale.status)"
+                        :title="statusOption(sale.status).description"
                     >
                         <span>{{ statusOption(sale.status).icon }}</span>
                         {{ statusOption(sale.status).short }}

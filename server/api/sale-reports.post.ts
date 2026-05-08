@@ -3,12 +3,17 @@ import { Resend } from 'resend'
 
 /**
  * User-submitted report on a garage sale (false info, spam, inappropriate,
- * etc.). Sends an email to the configured admin inbox; doesn't auto-hide
- * the sale. Phase 1 has no `sale_reports` table — we just email and let
- * the admin decide. If volume picks up, we add persistence + a queue.
+ * etc.). Persists to `sale_reports` (migration 0021) for dedupe + rate
+ * limiting, then emails the configured admin inbox. We don't auto-hide
+ * the sale — admin reviews and decides.
  *
- * Auth required so reports are tied to an accountable user.
+ * Auth required so reports are tied to an accountable user. The unique
+ * constraint on (reporter_id, sale_id) blocks repeat reports from the
+ * same user, and a per-user hourly cap keeps a single account from
+ * burying the admin inbox.
  */
+
+const REPORTS_PER_HOUR_LIMIT = 5
 
 const ALLOWED_REASONS = new Set([
     'false_info',
@@ -86,6 +91,38 @@ export default defineEventHandler(async (event) => {
     if (sale.deleted_at) {
         // Already removed by the owner — nothing to act on.
         return { skipped: 'sale already deleted' }
+    }
+
+    // Per-user hourly rate limit. The unique-constraint dedupe below
+    // covers "same user re-reporting the same sale", but a user could
+    // still fire reports across many sales; cap that at the source.
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count: recentCount, error: rateErr } = await admin
+        .from('sale_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('reporter_id', user.id)
+        .gte('created_at', oneHourAgo)
+    if (rateErr) throw createError({ statusCode: 500, statusMessage: rateErr.message })
+    if ((recentCount ?? 0) >= REPORTS_PER_HOUR_LIMIT) {
+        throw createError({
+            statusCode: 429,
+            statusMessage: 'Too many reports. Please try again in an hour.',
+        })
+    }
+
+    // Persist the report. Unique (reporter_id, sale_id) gives us free
+    // dedupe — a replay or a user re-clicking Submit returns 23505.
+    const { error: insertErr } = await admin.from('sale_reports').insert({
+        reporter_id: user.id,
+        sale_id: sale.id,
+        reason,
+        notes: notes || null,
+    })
+    if (insertErr) {
+        if (insertErr.code === '23505') {
+            return { skipped: 'already reported' }
+        }
+        throw createError({ statusCode: 500, statusMessage: insertErr.message })
     }
 
     // Reporter + owner profiles for the email.

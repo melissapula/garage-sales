@@ -325,7 +325,9 @@ async function submit() {
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700">Photos (optional)</label>
+                <label class="block text-sm font-medium text-gray-700">
+                    Photos (optional, up to 10)
+                </label>
                 <PhotoUploader v-model="photos" class="mt-1" />
             </div>
 

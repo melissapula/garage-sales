@@ -26,7 +26,7 @@ function toneClass(tone: string) {
                     :key="t.id"
                     class="pointer-events-auto flex max-w-sm items-start gap-3 rounded-lg px-4 py-3 text-sm shadow-lg ring-1"
                     :class="toneClass(t.tone)"
-                    role="alert"
+                    :role="t.tone === 'error' ? 'alert' : 'status'"
                 >
                     <span class="min-w-0 flex-1 whitespace-pre-line">{{ t.message }}</span>
                     <button

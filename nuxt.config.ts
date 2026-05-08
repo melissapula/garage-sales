@@ -72,11 +72,16 @@ export default defineNuxtConfig({
                 {
                     // Sale photos in Supabase Storage — cache so a user can
                     // re-open a saved sale offline and still see images.
+                    // StaleWhileRevalidate (not CacheFirst) so a photo the
+                    // owner has since deleted or replaced gets refreshed on
+                    // the next online visit instead of sitting stale until
+                    // expiration. 7d max so even a 404'd entry eventually
+                    // ages out of the cache.
                     urlPattern: /\/storage\/v1\/object\/public\/sale-photos\/.*/,
-                    handler: 'CacheFirst',
+                    handler: 'StaleWhileRevalidate',
                     options: {
                         cacheName: 'sale-photos',
-                        expiration: { maxEntries: 100, maxAgeSeconds: 14 * 24 * 60 * 60 },
+                        expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
                     },
                 },
             ],
@@ -112,6 +117,7 @@ export default defineNuxtConfig({
 
     app: {
         head: {
+            htmlAttrs: { lang: 'en' },
             title: 'Garage Sale Tracker',
             meta: [
                 { name: 'viewport', content: 'width=device-width, initial-scale=1' },
@@ -217,6 +223,18 @@ export default defineNuxtConfig({
     },
 
     routeRules: {
+        // Baseline security headers on every response. Vercel sets some
+        // defaults but explicit beats inferred. Nitro deep-merges these
+        // with the route-specific rules below, so X-Robots-Tag on auth
+        // pages still applies on top of these.
+        '/**': {
+            headers: {
+                'X-Content-Type-Options': 'nosniff',
+                'X-Frame-Options': 'DENY',
+                'Referrer-Policy': 'strict-origin-when-cross-origin',
+            },
+        },
+
         // Auth + private routes — keep search engines out. These pages
         // are either user-specific or low-content forms that would
         // dilute our crawl budget and pollute the index. Setting

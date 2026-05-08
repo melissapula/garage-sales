@@ -8,6 +8,7 @@ const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
 const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
 
 const email = ref('')
+const displayName = ref('')
 const password = ref('')
 const passwordConfirm = ref('')
 const showPassword = ref(false)
@@ -46,12 +47,17 @@ async function submit() {
     alreadyExists.value = false
     if (!canSubmit.value) return
     loading.value = true
+    // The handle_new_user trigger reads raw_user_meta_data.display_name
+    // first and falls back to the email's local part if it's empty, so
+    // we only attach the field when the user actually filled it in.
+    const trimmedDisplayName = displayName.value.trim()
     const { data, error: err } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
         options: {
             emailRedirectTo: `${config.public.siteUrl}/confirm`,
             ...(captchaToken.value ? { captchaToken: captchaToken.value } : {}),
+            ...(trimmedDisplayName ? { data: { display_name: trimmedDisplayName } } : {}),
         },
     })
     loading.value = false
@@ -115,6 +121,24 @@ async function submit() {
                     required
                     class="input mt-1"
                 />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700" for="display-name">
+                    Display name <span class="text-gray-400">(optional)</span>
+                </label>
+                <input
+                    id="display-name"
+                    v-model="displayName"
+                    type="text"
+                    autocomplete="nickname"
+                    maxlength="80"
+                    class="input mt-1"
+                />
+                <p class="mt-1 text-xs text-gray-500">
+                    Shown when you message someone. We'll use the part of your email
+                    before the @ if you leave this blank.
+                </p>
             </div>
 
             <div>

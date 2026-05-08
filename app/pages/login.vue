@@ -55,8 +55,17 @@ async function submit() {
         error.value = err.message
         return
     }
-    const redirect = (route.query.redirect as string) || '/browse'
-    router.push(redirect)
+    router.push(safeRedirect(route.query.redirect))
+}
+
+// Only follow `?redirect=` if it points back into our own app. Anything
+// starting with `//` or `/\` is a protocol-relative URL and would bounce
+// the freshly-authed user off-site.
+function safeRedirect(raw: unknown): string {
+    if (typeof raw !== 'string') return '/browse'
+    if (!raw.startsWith('/')) return '/browse'
+    if (raw.startsWith('//') || raw.startsWith('/\\')) return '/browse'
+    return raw
 }
 </script>
 

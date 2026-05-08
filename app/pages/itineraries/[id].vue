@@ -592,6 +592,28 @@ const routeDateLabel = computed(() => {
                         Drag stops by the <span class="font-mono">⋮⋮</span> handle to reorder.
                     </p>
 
+                    <!-- Preemptive caps so users don't discover the limits at
+                         the moment they tap Optimize / Export. Mapbox v1
+                         maxes out at 11 stops; Google's dir/?waypoints=
+                         deep-link tops out at 9. -->
+                    <p
+                        v-if="activeStopsInOrder.length > 11"
+                        class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
+                    >
+                        ⚠ {{ activeStopsInOrder.length }} stops — Optimize Order
+                        only supports 11. Remove
+                        {{ activeStopsInOrder.length - 11 }} to use it.
+                    </p>
+                    <p
+                        v-else-if="activeStopsInOrder.length > 9"
+                        class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                    >
+                        Heads up: Google Maps export caps at 9 waypoints, so
+                        the last {{ activeStopsInOrder.length - 9 }} stop{{
+                            activeStopsInOrder.length - 9 === 1 ? '' : 's'
+                        }} will be dropped from the deep-link.
+                    </p>
+
                     <draggable
                         v-if="stopsInVisitOrder.length"
                         v-model="draggableStops"
@@ -743,7 +765,7 @@ const routeDateLabel = computed(() => {
                 <!-- RIGHT: map -->
                 <div>
                     <ClientOnly>
-                        <RouteMap
+                        <LazyRouteMap
                             :stops="stopsForMap"
                             :order="visitOrderForMap"
                             :route-geometry="routeGeometry"

@@ -9,13 +9,17 @@ const { unsave, refresh: refreshSavedIds } = useSavedSales()
 
 const today = todayLocalISO()
 
-const { data: savedSales, refresh: refreshSaved } = await useAsyncData('saved-sales-detail', () =>
-    fetchSavedSalesWithDetails(),
-)
-
-const { data: routes, refresh: refreshRoutes } = await useAsyncData('my-routes', () =>
-    fetchRoutes(),
-)
+// Run the two page-level fetches in parallel — sequentially they
+// waterfall on slow networks for no reason. Each useAsyncData keeps
+// its own refresh() so a saved-sale removal / route delete only
+// re-runs the relevant query.
+const [
+    { data: savedSales, refresh: refreshSaved },
+    { data: routes, refresh: refreshRoutes },
+] = await Promise.all([
+    useAsyncData('saved-sales-detail', () => fetchSavedSalesWithDetails()),
+    useAsyncData('my-routes', () => fetchRoutes()),
+])
 
 onMounted(() => {
     refreshSavedIds()

@@ -191,7 +191,7 @@ const mapsLinks = computed(() => {
 
                 <div>
                     <ClientOnly>
-                        <RouteMap
+                        <LazyRouteMap
                             :stops="stopsForMap"
                             :order="null"
                             :route-geometry="null"
