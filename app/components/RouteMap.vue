@@ -361,16 +361,36 @@ onBeforeUnmount(() => {
     map = null
 })
 
-watch(
-    () => [props.stops, props.order, props.routeGeometry, props.start, props.available],
-    () => {
-        if (map?.loaded()) {
-            render()
-            syncFromProps()
-        }
-    },
-    { deep: true },
-)
+// Stable signature watch instead of deep on the prop arrays — same
+// pattern BrowseMap uses (id:lat:lng per pin). A non-spatial property
+// change on an available sale (e.g. owner flipped status to closed via
+// realtime) would otherwise tear down and re-create every marker, which
+// drops the user's hover state mid-interaction. Popup HTML reads
+// `props.available.find(...)` on each open so non-marker fields stay
+// live without a rebuild.
+const renderSignature = computed(() => {
+    const stopSig = props.stops.map((s) => `${s.sale.id}:${s.sale.lat}:${s.sale.lng}`).join('|')
+    const orderSig = props.order ? props.order.join(',') : 'natural'
+    const startSig = props.start
+        ? `${props.start.lng}:${props.start.lat}:${props.start.label ?? ''}`
+        : 'none'
+    const availSig = (props.available ?? []).map((s) => `${s.id}:${s.lat}:${s.lng}`).join('|')
+    return `${stopSig}#${orderSig}#${startSig}#${availSig}`
+})
+watch(renderSignature, () => {
+    if (map?.loaded()) {
+        render()
+        syncFromProps()
+    }
+})
+// Geometry is a complex GeoJSON object; reference equality is the right
+// granularity here (a new optimize call always produces a new ref).
+watch(() => props.routeGeometry, () => {
+    if (map?.loaded()) {
+        render()
+        syncFromProps()
+    }
+})
 watch(() => props.selectedAvailableId, syncFromProps)
 watch(() => props.hoveredAvailableId, () => {
     if (props.selectedAvailableId) return

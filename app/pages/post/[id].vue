@@ -22,12 +22,16 @@ const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, as
     if (!data) {
         throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
     }
+    // Ownership check inside the loader so we don't leak the existence
+    // of a foreign sale via a 403 vs 404 distinction (RLS would block
+    // mutations anyway, but the read here returns the row's full shape
+    // including photos, so the cleanest fix is to mask ownership
+    // mismatches as not-found upstream of the form mount).
+    if (user.value && data.user_id !== user.value.id) {
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+    }
     return data as unknown as GarageSale
 })
-
-if (existing.value && user.value && existing.value.user_id !== user.value.id) {
-    throw createError({ statusCode: 403, statusMessage: 'Not your sale' })
-}
 
 const title = ref(existing.value?.title ?? '')
 const description = ref(existing.value?.description ?? '')
