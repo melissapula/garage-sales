@@ -13,6 +13,12 @@ const props = defineProps<{
     /** Driver's start location. */
     start: { lng: number; lat: number; label?: string } | null
     /**
+     * Custom end address pin (only set when the user picks "End at an address").
+     * Round-trip mode shares the start pin; "End at last sale" reuses the
+     * last stop's numbered pin — both leave this null.
+     */
+    end?: { lng: number; lat: number; label?: string } | null
+    /**
      * Saved sales available on this route's date that aren't yet in the route.
      * Rendered as small status-colored pins with hover/click sync.
      */
@@ -96,6 +102,30 @@ function buildStartMarker(label = 'You'): HTMLDivElement {
     const el = document.createElement('div')
     el.style.cssText = `
         background: #0EA5E9;
+        color: white;
+        font-family: 'DM Sans', sans-serif;
+        font-weight: 700;
+        font-size: 11px;
+        min-width: 36px;
+        height: 36px;
+        padding: 0 8px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    `
+    el.textContent = label
+    return el
+}
+
+function buildEndMarker(label = 'End'): HTMLDivElement {
+    // Same pill shape as the start marker but a different color so the
+    // user can see start and end at a glance without consulting the legend.
+    const el = document.createElement('div')
+    el.style.cssText = `
+        background: #16A34A;
         color: white;
         font-family: 'DM Sans', sans-serif;
         font-weight: 700;
@@ -226,6 +256,13 @@ function render() {
         markers.push(startMarker)
     }
 
+    if (props.end) {
+        const endMarker = new mapboxgl.Marker({ element: buildEndMarker(props.end.label) })
+            .setLngLat([props.end.lng, props.end.lat])
+            .addTo(map)
+        markers.push(endMarker)
+    }
+
     // Available (saved-but-not-added) sales as small status-colored pins
     // with hover + click sync back to the parent.
     for (const sale of props.available ?? []) {
@@ -280,6 +317,7 @@ function render() {
     // Fit to all known points.
     const allCoords: [number, number][] = props.stops.map((s) => [s.sale.lng, s.sale.lat])
     if (props.start) allCoords.push([props.start.lng, props.start.lat])
+    if (props.end) allCoords.push([props.end.lng, props.end.lat])
     for (const sale of props.available ?? []) {
         allCoords.push([sale.lng, sale.lat])
     }
@@ -374,8 +412,11 @@ const renderSignature = computed(() => {
     const startSig = props.start
         ? `${props.start.lng}:${props.start.lat}:${props.start.label ?? ''}`
         : 'none'
+    const endSig = props.end
+        ? `${props.end.lng}:${props.end.lat}:${props.end.label ?? ''}`
+        : 'none'
     const availSig = (props.available ?? []).map((s) => `${s.id}:${s.lat}:${s.lng}`).join('|')
-    return `${stopSig}#${orderSig}#${startSig}#${availSig}`
+    return `${stopSig}#${orderSig}#${startSig}#${endSig}#${availSig}`
 })
 watch(renderSignature, () => {
     if (map?.loaded()) {

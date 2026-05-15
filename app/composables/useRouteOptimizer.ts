@@ -7,6 +7,14 @@
  */
 export const GOOGLE_MAX_WAYPOINTS = 9
 
+export type EndMode = 'round_trip' | 'last_stop' | 'address'
+
+export interface RouteEnd {
+    mode: EndMode
+    /** Required when mode === 'address'. */
+    coord?: { lng: number; lat: number }
+}
+
 export interface OptimizedLeg {
     distanceMeters: number
     durationSeconds: number
@@ -24,51 +32,69 @@ export interface OptimizedRoute {
     /**
      * Per-leg drive segments in optimized order.
      * legs[0] = start → first stop, legs[1] = first stop → second stop, …
-     * For a round-trip optimize, the final entry is the return-to-start leg
-     * (separated from `stopLegs` for convenience).
+     * For a round-trip optimize or a custom-end optimize, the final entry
+     * is the trailing leg (separated from `stopLegs` for convenience).
      */
     legs: OptimizedLeg[]
-    /** Just the legs that lead INTO each stop (excludes the return-home leg, if any). */
+    /** Just the legs that lead INTO each stop (excludes the return/end leg). */
     stopLegs: OptimizedLeg[]
-    /** Drive time and distance for the return leg if this is a round-trip; null otherwise. */
+    /** Drive time + distance back to the start. Non-null iff end.mode === 'round_trip'. */
     returnLeg: OptimizedLeg | null
+    /** Drive time + distance to a custom end address. Non-null iff end.mode === 'address'. */
+    endLeg: OptimizedLeg | null
 }
 
 /**
  * Solve a TSP-style optimal route from `start` through all `stops`.
  * Uses Mapbox Optimization API v1 (driving profile).
  *
- * `roundTrip = true` (default): drive returns to the start point. All stops are reorderable.
- * `roundTrip = false`: open trip — the LAST input stop is fixed as the destination,
- *                       middle stops are reordered. (Mapbox v1 doesn't allow `destination=any`
- *                       with `roundtrip=false`, so we pin the endpoint to the user's choice.)
+ * `end.mode`:
+ *   - 'round_trip' (default): drive returns to the start point. All stops are reorderable.
+ *   - 'last_stop':            open trip — the LAST input stop is fixed as the destination,
+ *                             middle stops are reordered. (Mapbox v1 doesn't allow
+ *                             `destination=any` with `roundtrip=false`, so we pin to
+ *                             the user's last dragged stop.)
+ *   - 'address':              open trip — the user-supplied end coord becomes the fixed
+ *                             destination. All stops are reorderable; the end coord is
+ *                             appended as an extra waypoint and pinned via destination=last.
  *
- * Mapbox limit: 12 coordinates total (start + stops). We bail out otherwise.
+ * Mapbox cap: 12 coordinates total. That's start + 11 stops (round_trip/last_stop)
+ * or start + 10 stops + end (address mode).
  */
 export async function optimizeRoute(
     start: { lng: number; lat: number },
     stops: { lng: number; lat: number }[],
-    options: { roundTrip?: boolean } = {},
+    end: RouteEnd = { mode: 'round_trip' },
 ): Promise<OptimizedRoute> {
-    const roundTrip = options.roundTrip !== false
-
     if (stops.length === 0) throw new Error('Need at least one stop to optimize')
-    if (stops.length + 1 > 12) {
-        throw new Error('Mapbox Optimization API supports up to 12 coordinates (start + 11 stops).')
+    if (end.mode === 'address' && !end.coord) {
+        throw new Error("End mode 'address' requires a coord")
+    }
+
+    const extraEndCoord = end.mode === 'address' ? 1 : 0
+    const totalCoords = 1 + stops.length + extraEndCoord
+    if (totalCoords > 12) {
+        const cap = end.mode === 'address' ? 10 : 11
+        throw new Error(
+            `Mapbox Optimization API supports up to ${cap} stops with the chosen end option.`,
+        )
     }
 
     const config = useRuntimeConfig()
     const token = config.public.mapboxToken as string
 
-    const all = [start, ...stops]
-    const coordStr = all.map((c) => `${c.lng},${c.lat}`).join(';')
+    const coordList = end.mode === 'address'
+        ? [start, ...stops, end.coord!]
+        : [start, ...stops]
+    const coordStr = coordList.map((c) => `${c.lng},${c.lat}`).join(';')
 
     const url = new URL(`https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordStr}`)
     url.searchParams.set('source', 'first')
-    if (roundTrip) {
+    if (end.mode === 'round_trip') {
         url.searchParams.set('roundtrip', 'true')
     } else {
-        // Open trip: pin the endpoint to the user's last stop, optimize the middle.
+        // Open trip: pin the endpoint to the last coord (either the user's
+        // last stop or the appended end address), optimize the middle.
         url.searchParams.set('destination', 'last')
         url.searchParams.set('roundtrip', 'false')
     }
@@ -111,7 +137,13 @@ export async function optimizeRoute(
     waypoints.forEach((w, inputIdx) => {
         orderToInputIdx[w.waypoint_index] = inputIdx
     })
-    const stopOrder = orderToInputIdx.slice(1).map((inputIdx) => inputIdx - 1)
+    // For address mode the input list is [start, ...stops, end] so we want
+    // the slice that covers the stops only. For other modes the array is
+    // already exactly [start, ...stops], so `slice(1, 1 + stops.length)`
+    // reduces to `slice(1)` and the semantics are identical.
+    const stopOrder = orderToInputIdx
+        .slice(1, 1 + stops.length)
+        .map((inputIdx) => inputIdx - 1)
 
     const legs: OptimizedLeg[] = (trip.legs ?? []).map(
         (l: { distance: number; duration: number }) => ({
@@ -120,10 +152,24 @@ export async function optimizeRoute(
         }),
     )
 
-    // For a round trip with N stops we get N+1 legs: N "into-a-stop" legs and
-    // one "back-to-start" leg. Split them so the timeline can ignore the return.
-    const stopLegs = roundTrip ? legs.slice(0, stops.length) : legs
-    const returnLeg = roundTrip ? (legs[stops.length] ?? null) : null
+    // Split the trailing leg (return-home or drive-to-end) off from the
+    // stop legs so the timeline can render it separately.
+    let stopLegs: OptimizedLeg[]
+    let returnLeg: OptimizedLeg | null
+    let endLeg: OptimizedLeg | null
+    if (end.mode === 'round_trip') {
+        stopLegs = legs.slice(0, stops.length)
+        returnLeg = legs[stops.length] ?? null
+        endLeg = null
+    } else if (end.mode === 'address') {
+        stopLegs = legs.slice(0, stops.length)
+        returnLeg = null
+        endLeg = legs[stops.length] ?? null
+    } else {
+        stopLegs = legs
+        returnLeg = null
+        endLeg = null
+    }
 
     return {
         stopOrder,
@@ -133,6 +179,7 @@ export async function optimizeRoute(
         legs,
         stopLegs,
         returnLeg,
+        endLeg,
     }
 }
 
@@ -141,29 +188,35 @@ export async function optimizeRoute(
  * Uses the Mapbox Directions API. Returns the same shape as `optimizeRoute`
  * so the UI can use either result interchangeably.
  *
- * `roundTrip = true` appends the start coord as a final waypoint so the route
- * returns home; otherwise the route ends at the last stop.
+ * `end.mode === 'round_trip'`  appends the start coord as a final waypoint.
+ * `end.mode === 'last_stop'`   ends at the last stop.
+ * `end.mode === 'address'`     appends the supplied end coord as a final waypoint.
  *
  * Directions API supports up to 25 coordinates per request.
  */
 export async function buildRouteFromOrder(
     start: { lng: number; lat: number },
     stops: { lng: number; lat: number }[],
-    options: { roundTrip?: boolean } = {},
+    end: RouteEnd = { mode: 'last_stop' },
 ): Promise<OptimizedRoute> {
-    const roundTrip = options.roundTrip === true
-
     if (stops.length === 0) throw new Error('Need at least one stop to route')
-    const totalCoords = 1 + stops.length + (roundTrip ? 1 : 0)
+    if (end.mode === 'address' && !end.coord) {
+        throw new Error("End mode 'address' requires a coord")
+    }
+
+    const extraCoord = end.mode === 'round_trip' || end.mode === 'address' ? 1 : 0
+    const totalCoords = 1 + stops.length + extraCoord
     if (totalCoords > 25) {
-        throw new Error('Directions API supports up to 24 stops per route.')
+        const cap = end.mode === 'last_stop' ? 24 : 23
+        throw new Error(`Directions API supports up to ${cap} stops with the chosen end option.`)
     }
 
     const config = useRuntimeConfig()
     const token = config.public.mapboxToken as string
 
     const coordList = [start, ...stops]
-    if (roundTrip) coordList.push(start)
+    if (end.mode === 'round_trip') coordList.push(start)
+    else if (end.mode === 'address') coordList.push(end.coord!)
     const coords = coordList.map((c) => `${c.lng},${c.lat}`).join(';')
     const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${coords}`)
     url.searchParams.set('geometries', 'geojson')
@@ -196,10 +249,22 @@ export async function buildRouteFromOrder(
         durationSeconds: l.duration,
     }))
 
-    // When round-tripping, the final leg is start→…→last→start; split it off
-    // so the timeline only counts the legs that lead INTO each stop.
-    const stopLegs = roundTrip ? legs.slice(0, stops.length) : legs
-    const returnLeg = roundTrip ? (legs[stops.length] ?? null) : null
+    let stopLegs: OptimizedLeg[]
+    let returnLeg: OptimizedLeg | null
+    let endLeg: OptimizedLeg | null
+    if (end.mode === 'round_trip') {
+        stopLegs = legs.slice(0, stops.length)
+        returnLeg = legs[stops.length] ?? null
+        endLeg = null
+    } else if (end.mode === 'address') {
+        stopLegs = legs.slice(0, stops.length)
+        returnLeg = null
+        endLeg = legs[stops.length] ?? null
+    } else {
+        stopLegs = legs
+        returnLeg = null
+        endLeg = null
+    }
 
     return {
         // Identity order — we used what the caller gave us.
@@ -210,6 +275,7 @@ export async function buildRouteFromOrder(
         legs,
         stopLegs,
         returnLeg,
+        endLeg,
     }
 }
 

@@ -8,7 +8,7 @@ const id = route.params.id as string
 const { data } = await useAsyncData(`share-${id}`, async () => {
     const { data: r, error: rErr } = await supabase
         .from('routes')
-        .select('id, name, route_date, is_public, user_id')
+        .select('id, name, route_date, is_public, user_id, end_mode, end_address, end_lat, end_lng')
         .eq('id', id)
         .maybeSingle()
     if (rErr) throw rErr
@@ -42,10 +42,27 @@ const { data } = await useAsyncData(`share-${id}`, async () => {
     const visibleStops = allStops.filter((s) => !s.sale?.deleted_at)
 
     return {
-        route: r as { id: string; name: string; route_date: string; is_public: boolean; user_id: string },
+        route: r as {
+            id: string
+            name: string
+            route_date: string
+            is_public: boolean
+            user_id: string
+            end_mode: import('~/composables/useRouteOptimizer').EndMode
+            end_address: string | null
+            end_lat: number | null
+            end_lng: number | null
+        },
         stops: visibleStops,
         ownerName: profile?.display_name ?? 'A user',
     }
+})
+
+const customEnd = computed(() => {
+    const r = data.value?.route
+    if (!r || r.end_mode !== 'address') return null
+    if (r.end_lat == null || r.end_lng == null) return null
+    return { lng: r.end_lng, lat: r.end_lat, label: 'End' as const, address: r.end_address }
 })
 
 const stopsForMap = computed(
@@ -86,16 +103,43 @@ useSeoMeta({
     twitterCard: 'summary_large_image',
 })
 
-// Build maps export URLs from stop coords, no start point, end at last stop.
+// Build maps export URLs from stop coords. The share page has no personal
+// start point (we don't know the viewer's location), so origin = first stop.
+// Destination depends on the route owner's saved end_mode:
+//   - 'last_stop'  → end at the last stop (waypoints = middle stops)
+//   - 'address'    → end at the owner's custom address (waypoints = all stops)
+//   - 'round_trip' → end back at the first stop (waypoints = remaining stops).
+//                    Without a real start, "round trip" is approximated as
+//                    return-to-first-stop, which is the closest meaningful
+//                    interpretation for a share viewer.
 // `GOOGLE_MAX_WAYPOINTS` comes from useRouteOptimizer (auto-imported) so
 // it stays in sync with /itineraries/[id].
 const mapsLinks = computed(() => {
     const stops = data.value?.stops ?? []
-    if (stops.length < 2) return null
+    if (stops.length === 0) return null
     const coords = stops.map((s) => `${s.sale.lat},${s.sale.lng}`)
-    const origin = coords[0]!
-    const destination = coords[coords.length - 1]!
-    const waypoints = coords.slice(1, -1)
+    const mode = data.value?.route.end_mode ?? 'last_stop'
+
+    let origin: string
+    let destination: string
+    let waypoints: string[]
+
+    if (mode === 'address' && customEnd.value) {
+        origin = coords[0]!
+        destination = `${customEnd.value.lat},${customEnd.value.lng}`
+        waypoints = coords.slice(1)
+    } else if (mode === 'round_trip') {
+        if (coords.length < 2) return null
+        origin = coords[0]!
+        destination = coords[0]!
+        waypoints = coords.slice(1)
+    } else {
+        if (coords.length < 2) return null
+        origin = coords[0]!
+        destination = coords[coords.length - 1]!
+        waypoints = coords.slice(1, -1)
+    }
+
     const truncated = waypoints.length > GOOGLE_MAX_WAYPOINTS
     const googleWaypoints = truncated ? waypoints.slice(0, GOOGLE_MAX_WAYPOINTS) : waypoints
     const google = new URL('https://www.google.com/maps/dir/')
@@ -110,6 +154,12 @@ const mapsLinks = computed(() => {
     apple.searchParams.set('dirflg', 'd')
     return { google: google.toString(), apple: apple.toString(), truncated }
 })
+
+/** Per-click cache-buster — see useRouteOptimizer note on /itineraries/[id]. */
+function openInMaps(url: string) {
+    const sep = url.includes('?') ? '&' : '?'
+    window.open(`${url}${sep}_t=${Date.now()}`, '_blank', 'noopener,noreferrer')
+}
 </script>
 
 <template>
@@ -170,11 +220,18 @@ const mapsLinks = computed(() => {
                         <h3 class="font-display text-base font-bold text-gray-900">
                             Drive this route
                         </h3>
+                        <p
+                            v-if="customEnd && customEnd.address"
+                            class="text-xs text-gray-600"
+                        >
+                            Ends at <strong>{{ customEnd.address }}</strong>
+                        </p>
                         <a
                             :href="mapsLinks.google"
                             target="_blank"
                             rel="noopener noreferrer"
                             class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-sky-600"
+                            @click.prevent="openInMaps(mapsLinks.google)"
                         >
                             🗺️ Open in Google Maps
                         </a>
@@ -183,6 +240,7 @@ const mapsLinks = computed(() => {
                             target="_blank"
                             rel="noopener noreferrer"
                             class="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
+                            @click.prevent="openInMaps(mapsLinks.apple)"
                         >
                             🍎 Open in Apple Maps
                         </a>
@@ -196,6 +254,7 @@ const mapsLinks = computed(() => {
                             :order="null"
                             :route-geometry="null"
                             :start="null"
+                            :end="customEnd"
                         />
                         <template #fallback>
                             <div

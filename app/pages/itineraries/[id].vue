@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { GarageSale } from '~/composables/useGarageSales'
 import type { RouteStop } from '~/composables/useRoutes'
-import type { OptimizedRoute } from '~/composables/useRouteOptimizer'
+import type { EndMode, OptimizedRoute, RouteEnd } from '~/composables/useRouteOptimizer'
 import draggable from 'vuedraggable'
 
 const route = useRoute()
@@ -145,15 +145,28 @@ const capturingLocation = ref(false)
 const geocodingStart = ref(false)
 
 const departureTime = ref('08:00')
-const roundTrip = ref(true)
+
+// End-location state. Backed by the route row's end_mode / end_address /
+// end_lat / end_lng columns so the choice persists across reloads and the
+// share page reflects it. Default 'round_trip' for legacy rows.
+const endMode = ref<EndMode>(data.value?.route.end_mode ?? 'round_trip')
+const endAddress = ref(data.value?.route.end_address ?? '')
+const endResolved = ref<{ lng: number; lat: number } | null>(
+    data.value?.route.end_lat != null && data.value?.route.end_lng != null
+        ? { lng: data.value.route.end_lng, lat: data.value.route.end_lat }
+        : null,
+)
+const geocodingEnd = ref(false)
 
 const optimizedOrder = ref<number[] | null>(null)
 const routeGeometry = ref<GeoJSON.LineString | null>(null)
 const totalDistanceMi = ref<number | null>(null)
 const totalDriveMin = ref<number | null>(null)
 const timeline = ref<TimelineEntry[] | null>(null)
+// Trailing-leg duration: drive home (round trip) OR drive to custom end.
 const returnLegMin = ref<number | null>(null)
-const arriveHomeAt = ref<Date | null>(null)
+const endLegMin = ref<number | null>(null)
+const trailingArriveAt = ref<Date | null>(null)
 
 const optimizing = ref(false)
 const optimizeError = ref<string | null>(null)
@@ -165,7 +178,8 @@ function invalidateOptimization() {
     totalDriveMin.value = null
     timeline.value = null
     returnLegMin.value = null
-    arriveHomeAt.value = null
+    endLegMin.value = null
+    trailingArriveAt.value = null
 }
 
 async function captureLocation() {
@@ -213,28 +227,91 @@ async function geocodeStart() {
     }
 }
 
+async function geocodeEnd() {
+    optimizeError.value = null
+    if (!endAddress.value.trim()) {
+        optimizeError.value = 'Enter an end address.'
+        return
+    }
+    geocodingEnd.value = true
+    try {
+        const result = await geocodeAddress(endAddress.value.trim())
+        if (!result) {
+            optimizeError.value = "Couldn't find that end address."
+            endResolved.value = null
+            return
+        }
+        endResolved.value = { lng: result.lng, lat: result.lat }
+        endAddress.value = result.address
+        invalidateOptimization()
+        await persistEndChoice()
+    } catch (e) {
+        optimizeError.value = e instanceof Error ? e.message : 'Geocoding failed'
+    } finally {
+        geocodingEnd.value = false
+    }
+}
+
+async function setEndMode(mode: EndMode) {
+    if (endMode.value === mode) return
+    endMode.value = mode
+    invalidateOptimization()
+    await persistEndChoice()
+}
+
+/**
+ * Push the current end choice to the DB. Eager so a refresh / share-link
+ * visitor sees the latest decision; we don't bother optimistically reverting
+ * on failure (the user can re-pick — local state remains usable).
+ */
+async function persistEndChoice() {
+    if (!data.value) return
+    const payload = {
+        end_mode: endMode.value,
+        end_address: endMode.value === 'address' ? endAddress.value || null : null,
+        end_lat: endMode.value === 'address' && endResolved.value ? endResolved.value.lat : null,
+        end_lng: endMode.value === 'address' && endResolved.value ? endResolved.value.lng : null,
+    }
+    const { error } = await supabase.from('routes').update(payload).eq('id', id)
+    if (error) {
+        toast.error(`Couldn't save end choice: ${error.message}`)
+    }
+}
+
+/** Translate the local UI state into the optimizer's RouteEnd contract. */
+function currentRouteEnd(): RouteEnd {
+    if (endMode.value === 'address') {
+        if (!endResolved.value) throw new Error('Set the end address first.')
+        return { mode: 'address', coord: endResolved.value }
+    }
+    return { mode: endMode.value }
+}
+
 function applyRouteResult(result: OptimizedRoute, opts: { reorder: boolean }) {
     optimizedOrder.value = opts.reorder ? result.stopOrder : null
     routeGeometry.value = result.geometry
     totalDistanceMi.value = result.distanceMeters / 1609.344
     totalDriveMin.value = result.durationSeconds / 60
     returnLegMin.value = result.returnLeg ? result.returnLeg.durationSeconds / 60 : null
+    endLegMin.value = result.endLeg ? result.endLeg.durationSeconds / 60 : null
 
     const [hh, mm] = departureTime.value.split(':').map(Number)
     const departure = new Date(data.value!.route.route_date + 'T00:00:00')
     departure.setHours(hh ?? 8, mm ?? 0, 0, 0)
-    // Use stopLegs (excludes the return-home leg) so the timeline only shows
+    // Use stopLegs (excludes the trailing leg) so the timeline only shows
     // arrivals at actual stops.
     timeline.value = buildTimeline(result.stopLegs, departure, 30)
 
-    // Arrival back home = last stop's departure + return leg drive time.
-    if (result.returnLeg && timeline.value.length > 0) {
+    // Trailing-leg arrival: arrival back home (round trip) OR arrival at the
+    // custom end address. Only one of returnLeg / endLeg is ever non-null.
+    const trailing = result.returnLeg ?? result.endLeg
+    if (trailing && timeline.value.length > 0) {
         const lastStop = timeline.value[timeline.value.length - 1]!
-        arriveHomeAt.value = new Date(
-            lastStop.departAt.getTime() + result.returnLeg.durationSeconds * 1000,
+        trailingArriveAt.value = new Date(
+            lastStop.departAt.getTime() + trailing.durationSeconds * 1000,
         )
     } else {
-        arriveHomeAt.value = null
+        trailingArriveAt.value = null
     }
 }
 
@@ -249,23 +326,33 @@ const activeDraggable = computed(() =>
     draggableStops.value.filter((s) => !isRemovedSale(s.sale)),
 )
 
+// Mapbox Optimization v1 caps coords at 12. When the end is a custom
+// address we burn one coord for it, so the stop cap drops from 11 to 10.
+const optimizeStopCap = computed(() => (endMode.value === 'address' ? 10 : 11))
+
 async function optimize() {
     if (!data.value || activeStopsInOrder.value.length === 0) return
     if (!startResolved.value) {
         optimizeError.value = 'Set a starting point first.'
         return
     }
-    if (activeStopsInOrder.value.length + 1 > 12) {
-        optimizeError.value = 'Optimization supports up to 11 stops at a time.'
+    if (endMode.value === 'address' && !endResolved.value) {
+        optimizeError.value = 'Set the end address first.'
+        return
+    }
+    if (activeStopsInOrder.value.length > optimizeStopCap.value) {
+        optimizeError.value = `Optimization supports up to ${optimizeStopCap.value} stops with this end choice.`
         return
     }
     optimizing.value = true
     optimizeError.value = null
     try {
-        // For non-round-trip optimization, the user's LAST dragged stop
-        // becomes the fixed endpoint. We feed Mapbox the stops in dragged
-        // order so the destination=last pin lines up with the user's intent.
-        const inputStops = roundTrip.value ? activeStopsInOrder.value : activeDraggable.value
+        // For 'last_stop' optimization, the user's LAST dragged stop becomes
+        // the fixed endpoint — feed Mapbox the stops in dragged order so
+        // destination=last lines up with intent. Round-trip and address
+        // modes don't care about input order.
+        const inputStops =
+            endMode.value === 'last_stop' ? activeDraggable.value : activeStopsInOrder.value
         // Track which full-stops index each active input index corresponds
         // to so we can map Mapbox's active-relative result.stopOrder back
         // to indices in `data.value.stops` (which still contains tombstones).
@@ -273,9 +360,7 @@ async function optimize() {
             data.value!.stops.findIndex((fs) => fs.garage_sale_id === s.garage_sale_id),
         )
         const stopsInput = inputStops.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }))
-        const result = await optimizeRoute(startResolved.value, stopsInput, {
-            roundTrip: roundTrip.value,
-        })
+        const result = await optimizeRoute(startResolved.value, stopsInput, currentRouteEnd())
         const activeOrderFullIdx = result.stopOrder.map((i) => fullIdxFor[i]!)
         const tombstoneFullIdx = data.value!.stops
             .map((s, i) => (isRemovedSale(s.sale) ? i : -1))
@@ -297,6 +382,10 @@ async function useMyOrder() {
         optimizeError.value = 'Set a starting point first.'
         return
     }
+    if (endMode.value === 'address' && !endResolved.value) {
+        optimizeError.value = 'Set the end address first.'
+        return
+    }
     optimizing.value = true
     optimizeError.value = null
     try {
@@ -304,7 +393,7 @@ async function useMyOrder() {
             startResolved.value,
             // Honor the order the user dragged into.
             activeDraggable.value.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat })),
-            { roundTrip: roundTrip.value },
+            currentRouteEnd(),
         )
         applyRouteResult(result, { reorder: false })
     } catch (e) {
@@ -359,6 +448,9 @@ const mapsLinks = computed(() => {
     if (stops.length === 0) return null
 
     const stopCoords = stops.map((s) => `${s.sale.lat},${s.sale.lng}`)
+    const endCoord = endResolved.value
+        ? `${endResolved.value.lat},${endResolved.value.lng}`
+        : null
 
     let origin: string
     let destination: string
@@ -367,23 +459,31 @@ const mapsLinks = computed(() => {
     if (startResolved.value) {
         const startStr = `${startResolved.value.lat},${startResolved.value.lng}`
         origin = startStr
-        if (roundTrip.value) {
+        if (endMode.value === 'round_trip') {
             // Round trip: end back at start, all stops as waypoints in between.
             destination = startStr
             waypoints = stopCoords
+        } else if (endMode.value === 'address' && endCoord) {
+            // End at user-supplied address: all stops are waypoints leading there.
+            destination = endCoord
+            waypoints = stopCoords
         } else {
-            // One-way: end at the last stop.
+            // End at the last stop.
             destination = stopCoords[stopCoords.length - 1]!
             waypoints = stopCoords.slice(0, -1)
         }
     } else {
-        // No explicit start. Use first stop as origin.
-        if (stopCoords.length < 2 && !roundTrip.value) return null
+        // No explicit start. Fall back to using the first stop as origin.
         origin = stopCoords[0]!
-        if (roundTrip.value) {
+        if (endMode.value === 'address' && endCoord) {
+            destination = endCoord
+            waypoints = stopCoords.slice(1)
+        } else if (endMode.value === 'round_trip') {
+            if (stopCoords.length < 2) return null
             destination = stopCoords[0]!
             waypoints = stopCoords.slice(1)
         } else {
+            if (stopCoords.length < 2) return null
             destination = stopCoords[stopCoords.length - 1]!
             waypoints = stopCoords.slice(1, -1)
         }
@@ -412,6 +512,20 @@ const mapsLinks = computed(() => {
         droppedCount: waypoints.length - googleWaypoints.length,
     }
 })
+
+/**
+ * Open a Maps deep-link with a per-click cache-buster appended. Without
+ * this, mobile OSes (and to a lesser extent desktop Google Maps tabs) tend
+ * to recognize an identical URI and refresh the *previous* navigation
+ * activity instead of routing the new params — so a user who tweaks the
+ * route and re-taps "Open in Google Maps" sees the old route. Appending
+ * `_t=<timestamp>` makes every click a distinct URI from the OS's POV.
+ * Unknown params are ignored by Google/Apple Maps.
+ */
+function openInMaps(url: string) {
+    const sep = url.includes('?') ? '&' : '?'
+    window.open(`${url}${sep}_t=${Date.now()}`, '_blank', 'noopener,noreferrer')
+}
 
 async function deleteRoute() {
     const ok = await confirm({
@@ -597,12 +711,12 @@ const routeDateLabel = computed(() => {
                          maxes out at 11 stops; Google's dir/?waypoints=
                          deep-link tops out at 9. -->
                     <p
-                        v-if="activeStopsInOrder.length > 11"
+                        v-if="activeStopsInOrder.length > optimizeStopCap"
                         class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
                     >
                         ⚠ {{ activeStopsInOrder.length }} stops — Optimize Order
-                        only supports 11. Remove
-                        {{ activeStopsInOrder.length - 11 }} to use it.
+                        only supports {{ optimizeStopCap }} with the current end choice.
+                        Remove {{ activeStopsInOrder.length - optimizeStopCap }} to use it.
                     </p>
                     <p
                         v-else-if="activeStopsInOrder.length > 9"
@@ -770,6 +884,7 @@ const routeDateLabel = computed(() => {
                             :order="visitOrderForMap"
                             :route-geometry="routeGeometry"
                             :start="startResolved"
+                            :end="endMode === 'address' && endResolved ? { lng: endResolved.lng, lat: endResolved.lat, label: 'End' } : null"
                             :available="availableSales"
                             :selected-available-id="selectedAvailableId"
                             :hovered-available-id="hoveredAvailableId"
@@ -798,6 +913,47 @@ const routeDateLabel = computed(() => {
                     <em>Use my order</em> drives the stops in the order you arranged. <em>Optimize order</em>
                     finds the shortest path through all of them. 30 min per stop.
                 </p>
+
+                <!--
+                  Stop-count caps by feature. These limits come from the upstream APIs
+                  (Mapbox Optimization v1, Mapbox Directions v5, Google Maps deep-link
+                  param), not from our own code — so they're worth surfacing up front
+                  rather than waiting for the user to discover them at click time. The
+                  "Use my order" / "Optimize order" caps shift by 1 when ending at a
+                  custom address (the end coord burns one slot in the Mapbox call).
+                -->
+                <details class="mt-3 rounded-lg bg-cream/60 px-4 py-3 text-sm ring-1 ring-orange-100">
+                    <summary class="cursor-pointer font-medium text-gray-800">
+                        Stop limits by feature
+                    </summary>
+                    <ul class="mt-2 space-y-1.5 text-xs text-gray-700">
+                        <li>
+                            💾 <strong>Save to your list</strong> — no limit. Add as
+                            many sales as you want to a route.
+                        </li>
+                        <li>
+                            📋 <strong>Use my order</strong> — up to
+                            {{ endMode === 'address' ? 23 : 24 }} stops
+                            ({{ endMode === 'address' ? '23 with' : '24 without' }} a
+                            custom end address).
+                        </li>
+                        <li>
+                            🧭 <strong>Optimize order</strong> — up to
+                            {{ optimizeStopCap }} stops
+                            ({{ endMode === 'address' ? '10 with' : '11 without' }} a
+                            custom end address).
+                        </li>
+                        <li>
+                            🗺️ <strong>Open in Google Maps</strong> — up to 9 stops
+                            between your start and end. Extra stops get dropped from
+                            the link (we show a warning when this happens).
+                        </li>
+                        <li>
+                            🍎 <strong>Open in Apple Maps</strong> — no practical limit.
+                            Handles every stop on the route.
+                        </li>
+                    </ul>
+                </details>
 
                 <div class="mt-4 grid gap-4 sm:grid-cols-2">
                     <!-- Start mode picker -->
@@ -951,20 +1107,110 @@ const routeDateLabel = computed(() => {
                     </div>
                 </div>
 
-                <label class="mt-4 flex cursor-pointer items-start gap-2 text-sm">
-                    <input
-                        v-model="roundTrip"
-                        type="checkbox"
-                        class="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
-                    />
-                    <span>
-                        <span class="font-medium text-gray-900">Return to start</span>
-                        <span class="block text-xs text-gray-500">
-                            Round trip — drive home after the last stop. Uncheck to end at the last
-                            stop in your dragged order instead.
-                        </span>
-                    </span>
-                </label>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700">End at</label>
+                    <div class="mt-1 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            class="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition"
+                            :class="
+                                endMode === 'round_trip'
+                                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                            "
+                            @click="setEndMode('round_trip')"
+                        >
+                            🏠 Round trip
+                        </button>
+                        <button
+                            type="button"
+                            class="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition"
+                            :class="
+                                endMode === 'last_stop'
+                                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                            "
+                            @click="setEndMode('last_stop')"
+                        >
+                            🏁 Last sale
+                        </button>
+                        <button
+                            type="button"
+                            class="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition"
+                            :class="
+                                endMode === 'address'
+                                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                            "
+                            @click="setEndMode('address')"
+                        >
+                            📍 An address
+                        </button>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">
+                        <template v-if="endMode === 'round_trip'">
+                            Drive home after the last stop — back to your starting point.
+                        </template>
+                        <template v-else-if="endMode === 'last_stop'">
+                            End at whichever sale is last in your dragged order. Optimize Order
+                            keeps it pinned as the final stop.
+                        </template>
+                        <template v-else>
+                            Drive to a specific address after the last sale — e.g. someone's
+                            house, the office, a different city.
+                        </template>
+                    </p>
+                    <div v-if="endMode === 'address'" class="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <input
+                            v-model="endAddress"
+                            placeholder="123 Main St, City, State"
+                            class="input flex-1"
+                            :disabled="geocodingEnd"
+                            @keydown.enter.prevent="geocodeEnd"
+                        />
+                        <button
+                            type="button"
+                            class="btn-secondary !min-h-[44px] sm:w-32"
+                            :disabled="geocodingEnd"
+                            @click="geocodeEnd"
+                        >
+                            <span
+                                v-if="geocodingEnd"
+                                class="inline-flex items-center gap-2"
+                            >
+                                <svg
+                                    class="h-4 w-4 animate-spin"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                >
+                                    <circle
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                        class="opacity-25"
+                                    />
+                                    <path
+                                        d="M4 12a8 8 0 018-8"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                        stroke-linecap="round"
+                                        class="opacity-75"
+                                    />
+                                </svg>
+                                Finding…
+                            </span>
+                            <span v-else>Set end</span>
+                        </button>
+                    </div>
+                    <p
+                        v-if="endMode === 'address' && endResolved"
+                        class="mt-2 text-xs text-gray-700"
+                    >
+                        ✓ Ending at <strong>{{ endAddress }}</strong>
+                    </p>
+                </div>
 
                 <p
                     v-if="optimizeError"
@@ -1006,11 +1252,20 @@ const routeDateLabel = computed(() => {
                         Open your route in a maps app to drive turn-by-turn.
                     </p>
                     <div class="mt-3 flex flex-wrap gap-2">
+                        <!--
+                          We keep <a href> for right-click "Open in new tab"
+                          accessibility (the static href still works), but
+                          intercept left-click to append a per-click cache
+                          buster — without it, mobile Maps apps tend to
+                          re-show the previously-opened route instead of
+                          re-parsing the new params after a route edit.
+                        -->
                         <a
                             :href="mapsLinks.google"
                             target="_blank"
                             rel="noopener noreferrer"
                             class="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-sky-600"
+                            @click.prevent="openInMaps(mapsLinks.google)"
                         >
                             🗺️ Open in Google Maps
                         </a>
@@ -1019,6 +1274,7 @@ const routeDateLabel = computed(() => {
                             target="_blank"
                             rel="noopener noreferrer"
                             class="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50"
+                            @click.prevent="openInMaps(mapsLinks.apple)"
                         >
                             🍎 Open in Apple Maps
                         </a>
@@ -1063,28 +1319,38 @@ const routeDateLabel = computed(() => {
                             </div>
                         </li>
                         <li
-                            v-if="returnLegMin !== null"
+                            v-if="returnLegMin !== null || endLegMin !== null"
                             class="flex items-start gap-3 rounded-lg bg-sky-50 p-3 ring-1 ring-sky-100"
                         >
                             <span
                                 class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-500 text-sm font-bold text-white"
                             >
-                                🏠
+                                {{ returnLegMin !== null ? '🏠' : '🏁' }}
                             </span>
                             <div class="flex-1 min-w-0">
                                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                                     <span class="font-medium text-gray-900">
-                                        Drive home
+                                        {{ returnLegMin !== null ? 'Drive home' : 'Drive to end' }}
                                     </span>
                                     <span class="text-xs text-gray-500">
-                                        {{ Math.round(returnLegMin) }} min
+                                        {{
+                                            Math.round((returnLegMin ?? endLegMin) as number)
+                                        }} min
                                     </span>
                                 </div>
-                                <div v-if="arriveHomeAt" class="mt-0.5 text-sm text-gray-700">
-                                    Arrive home {{ fmtTime(arriveHomeAt) }}
+                                <div
+                                    v-if="trailingArriveAt"
+                                    class="mt-0.5 text-sm text-gray-700"
+                                >
+                                    Arrive {{ fmtTime(trailingArriveAt) }}
                                 </div>
                                 <div class="mt-0.5 text-xs text-gray-600">
-                                    Round trip back to your start point
+                                    <template v-if="returnLegMin !== null">
+                                        Round trip back to your start point
+                                    </template>
+                                    <template v-else>
+                                        {{ endAddress || 'Your custom end address' }}
+                                    </template>
                                 </div>
                             </div>
                         </li>

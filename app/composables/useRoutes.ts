@@ -1,5 +1,6 @@
 import type { GarageSale } from '~/composables/useGarageSales'
 import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
+import type { EndMode } from '~/composables/useRouteOptimizer'
 
 export interface Route {
     id: string
@@ -8,6 +9,12 @@ export interface Route {
     route_date: string
     is_public: boolean
     created_at: string
+    /** Where the route should end. Default 'round_trip'. */
+    end_mode: EndMode
+    /** Human-readable end address; only meaningful when end_mode === 'address'. */
+    end_address: string | null
+    end_lat: number | null
+    end_lng: number | null
 }
 
 export interface RouteStop {
