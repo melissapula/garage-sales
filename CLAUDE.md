@@ -1,7 +1,7 @@
 # Bemidji Garage Sales — Project Context for Claude
 
 > Read this file at the start of every session to get fully up to speed.
-> Last updated: 2026-05-15 (after three-mode route end picker + Maps cache-buster)
+> Last updated: 2026-05-19 (after Apple Maps single-destination correction)
 
 ---
 
@@ -144,7 +144,7 @@ There's also a project-level `app/error.vue` — Nuxt's global error boundary, b
 - **Browser-side photo compression:** canvas-based, max 1920px, JPEG ~0.85.
 - **Routing — Mapbox v1 limitation:** the Optimization API doesn't support `destination=any` with `roundtrip=false` (returns `NotImplemented`). We default to round-trip; the "Return to start" checkbox toggles between `roundtrip=true` and a Directions-API one-way path.
 - **Timeline:** `buildTimeline` consumes `stopLegs` (excludes the return-home leg). Default 30 min per stop. Departure defaults to 08:00 on the route's date. The return-home entry shows arrival-home time computed from the last stop's depart time + return-leg drive seconds.
-- **Maps export:** Google Maps URL `dir/?api=1&...` and Apple Maps `?saddr&daddr=A+to:B`. Round-trip toggle is honored. Google caps at 9 waypoints; the UI warns when stops are dropped.
+- **Maps export:** Google Maps URL `dir/?api=1&...` with `waypoints=A|B|C` chain (multi-stop, capped at 9). Apple Maps URL `?saddr=...&daddr=<first-stop>&dirflg=d` — single destination only, because Apple's URL scheme has never supported multi-stop. The `+to:` chaining trick is a Google convention that doesn't work in Apple Maps. The route page sets `appleFirstStopOnly: waypoints.length > 0` on the mapsLinks return and shows an amber note next to the buttons when multi-stop, so users aren't surprised that the 🍎 button only navigates to stop 1. Use Google for the full multi-stop drive.
 - **Facebook share:** standard share dialog (`facebook.com/sharer/sharer.php?u=...`). We can't auto-target a specific group — Meta deprecated `publish_to_groups` for general apps. The OG meta tags on `/sale/[id]` give the dialog a rich preview once the site is deployed.
 - **Messaging:** thread is keyed by (pair of participants, sale_id). Find-or-create runs server-side via the `find_or_create_thread()` security-definer RPC, which validates `contact_enabled` + sale ownership and auto-unhides the thread for the caller (so a hidden thread doesn't get duplicated when a user re-messages the owner). Unread count = my unread messages across all threads (RLS-filtered). Shown as a navbar badge.
 - **Per-user thread hide.** "Remove from inbox" on `/inbox/[id]` calls the `hide_thread()` RPC, which flips `hidden_for_one` or `hidden_for_two` based on which participant the caller is. The other side keeps the conversation + every message. A new reply from the other side resurfaces the thread for the hider via the `update_thread_on_message` trigger. Physical thread DELETE is gone.

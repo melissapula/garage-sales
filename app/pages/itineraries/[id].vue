@@ -266,6 +266,11 @@ async function setEndMode(mode: EndMode) {
  */
 async function persistEndChoice() {
     if (!data.value) return
+    // The routes_end_address_coords_check constraint rejects rows where
+    // end_mode = 'address' without end_lat/end_lng. Selecting the pill
+    // before entering an address is a valid intermediate UI state, so
+    // skip the save until geocodeEnd() has resolved coords.
+    if (endMode.value === 'address' && !endResolved.value) return
     const payload = {
         end_mode: endMode.value,
         end_address: endMode.value === 'address' ? endAddress.value || null : null,
@@ -499,10 +504,14 @@ const mapsLinks = computed(() => {
     if (googleWaypoints.length) google.searchParams.set('waypoints', googleWaypoints.join('|'))
     google.searchParams.set('travelmode', 'driving')
 
-    const appleDaddr = [...waypoints, destination].join(' to:')
+    // Apple Maps' URL scheme only supports a single daddr (the +to: chain
+    // is a Google convention Apple has never implemented), so route to just
+    // the first stop after the origin. The template warns when this means
+    // dropping later stops from the Apple link.
+    const appleFirstStop = waypoints[0] ?? destination
     const apple = new URL('https://maps.apple.com/')
     apple.searchParams.set('saddr', origin)
-    apple.searchParams.set('daddr', appleDaddr)
+    apple.searchParams.set('daddr', appleFirstStop)
     apple.searchParams.set('dirflg', 'd')
 
     return {
@@ -510,6 +519,7 @@ const mapsLinks = computed(() => {
         apple: apple.toString(),
         truncated,
         droppedCount: waypoints.length - googleWaypoints.length,
+        appleFirstStopOnly: waypoints.length > 0,
     }
 })
 
@@ -949,8 +959,10 @@ const routeDateLabel = computed(() => {
                             the link (we show a warning when this happens).
                         </li>
                         <li>
-                            🍎 <strong>Open in Apple Maps</strong> — no practical limit.
-                            Handles every stop on the route.
+                            🍎 <strong>Open in Apple Maps</strong> — first stop only.
+                            Apple's URL scheme doesn't support multi-stop deep links, so the button
+                            routes from your start to the first stop. Use Google Maps for the full
+                            multi-stop route.
                         </li>
                     </ul>
                 </details>
@@ -1285,7 +1297,13 @@ const routeDateLabel = computed(() => {
                     >
                         Heads up: Google Maps caps direction links at 9 stops between start and end.
                         The last {{ mapsLinks.droppedCount }} stop(s) won't appear in Google's link.
-                        Apple Maps handles all of them.
+                    </p>
+                    <p
+                        v-if="mapsLinks.appleFirstStopOnly"
+                        class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                    >
+                        Apple Maps deep links only support one destination, so the 🍎 button routes
+                        to your first stop only. Use Google Maps to navigate the full route.
                     </p>
                 </div>
 

@@ -148,11 +148,19 @@ const mapsLinks = computed(() => {
     google.searchParams.set('destination', destination)
     if (googleWaypoints.length) google.searchParams.set('waypoints', googleWaypoints.join('|'))
     google.searchParams.set('travelmode', 'driving')
+    // Apple Maps' URL scheme only supports a single daddr (no multi-stop),
+    // so route to just the first stop after the origin.
+    const appleFirstStop = waypoints[0] ?? destination
     const apple = new URL('https://maps.apple.com/')
     apple.searchParams.set('saddr', origin)
-    apple.searchParams.set('daddr', [...waypoints, destination].join(' to:'))
+    apple.searchParams.set('daddr', appleFirstStop)
     apple.searchParams.set('dirflg', 'd')
-    return { google: google.toString(), apple: apple.toString(), truncated }
+    return {
+        google: google.toString(),
+        apple: apple.toString(),
+        truncated,
+        appleFirstStopOnly: waypoints.length > 0,
+    }
 })
 
 /** Per-click cache-buster — see useRouteOptimizer note on /itineraries/[id]. */
@@ -244,6 +252,13 @@ function openInMaps(url: string) {
                         >
                             🍎 Open in Apple Maps
                         </a>
+                        <p
+                            v-if="mapsLinks.appleFirstStopOnly"
+                            class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                        >
+                            Apple Maps deep links only support one destination, so the 🍎 button routes
+                            to your first stop only. Use Google Maps to navigate the full route.
+                        </p>
                     </div>
                 </div>
 
