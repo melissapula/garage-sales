@@ -1,47 +1,47 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
+import type { GarageSale } from '~/composables/useGarageSales';
 
 const props = defineProps<{
-    sale: GarageSale
+    sale: GarageSale;
     /** Whether this card is currently the selected/highlighted one. */
-    selected?: boolean
-}>()
+    selected?: boolean;
+}>();
 
 const emit = defineEmits<{
-    (e: 'select', saleId: string): void
-    (e: 'hover', saleId: string | null): void
-}>()
+    (e: 'select', saleId: string): void;
+    (e: 'hover', saleId: string | null): void;
+}>();
 
-const user = useSupabaseUser()
-const { isSaved, save, unsave } = useSavedSales()
-const toast = useToast()
+const user = useSupabaseUser();
+const { isSaved, save, unsave } = useSavedSales();
+const toast = useToast();
 
-const status = computed(() => saleStatus(props.sale))
-const schedule = computed(() => summarizeSchedule(props.sale))
+const status = computed(() => saleStatus(props.sale));
+const schedule = computed(() => summarizeSchedule(props.sale));
 
 function onClick() {
-    emit('select', props.sale.id)
+    emit('select', props.sale.id);
 }
 
-const saving = ref(false)
+const saving = ref(false);
 async function onLetsGo(ev: Event) {
-    ev.stopPropagation()
+    ev.stopPropagation();
     if (!user.value) {
-        navigateTo('/login')
-        return
+        navigateTo('/login');
+        return;
     }
-    saving.value = true
-    await save(props.sale.id)
-    saving.value = false
+    saving.value = true;
+    await save(props.sale.id);
+    saving.value = false;
 }
 
-const removing = ref(false)
+const removing = ref(false);
 async function onRemove(ev: Event) {
-    ev.stopPropagation()
-    removing.value = true
-    await unsave(props.sale.id)
-    removing.value = false
-    toast.success('Removed from saved sales.')
+    ev.stopPropagation();
+    removing.value = true;
+    await unsave(props.sale.id);
+    removing.value = false;
+    toast.success('Removed from saved sales.');
 }
 </script>
 

@@ -1,86 +1,86 @@
 <script setup lang="ts">
-import type { EmailOtpType } from '@supabase/supabase-js'
+import type { EmailOtpType } from '@supabase/supabase-js';
 
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const router = useRouter()
-const route = useRoute()
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
+const route = useRoute();
 
-const error = ref<string | null>(null)
+const error = ref<string | null>(null);
 
 async function processCallback() {
     // 1. Server-side error (e.g. expired link).
-    const errDesc = route.query.error_description as string | undefined
+    const errDesc = route.query.error_description as string | undefined;
     if (errDesc) {
-        error.value = decodeURIComponent(errDesc)
-        return
+        error.value = decodeURIComponent(errDesc);
+        return;
     }
 
     // 2. Token hash flow (recommended for cross-device email links).
     //    Supabase email template needs {{ .TokenHash }} and a type for this
     //    to work — see README/CLAUDE.md.
-    const tokenHash = route.query.token_hash as string | undefined
-    const otpType = route.query.type as EmailOtpType | undefined
+    const tokenHash = route.query.token_hash as string | undefined;
+    const otpType = route.query.type as EmailOtpType | undefined;
     if (tokenHash && otpType) {
         const { error: err } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: otpType,
-        })
+        });
         if (err) {
-            error.value = err.message
-            return
+            error.value = err.message;
+            return;
         }
         // Recovery (password reset) → land on the reset-password form.
         // Signup / email change / other → straight into the app with welcome.
-        router.push(otpType === 'recovery' ? '/reset-password' : '/browse?welcome=1')
-        return
+        router.push(otpType === 'recovery' ? '/reset-password' : '/browse?welcome=1');
+        return;
     }
 
     // 3. PKCE flow: ?code=… in the URL. Only succeeds on the same device
     //    that initiated signup; otherwise we treat it as "verified but no
     //    local session" and bounce to login with a friendly banner.
-    const code = route.query.code as string | undefined
+    const code = route.query.code as string | undefined;
     if (code) {
-        const { error: err } = await supabase.auth.exchangeCodeForSession(code)
+        const { error: err } = await supabase.auth.exchangeCodeForSession(code);
         if (!err) {
-            router.push('/browse?welcome=1')
-            return
+            router.push('/browse?welcome=1');
+            return;
         }
         // Most common case: cross-device click. The email confirmation has
         // succeeded server-side; the user just needs to sign in fresh here.
-        router.push('/login?confirmed=1')
-        return
+        router.push('/login?confirmed=1');
+        return;
     }
 
     // Implicit flow recovery sometimes arrives with `?type=recovery` in the
     // URL while the session lands in the hash. If we have a session by now
     // and the type indicates recovery, send them to the reset form.
     if (otpType === 'recovery') {
-        const { data } = await supabase.auth.getSession()
+        const { data } = await supabase.auth.getSession();
         if (data.session) {
-            router.push('/reset-password')
-            return
+            router.push('/reset-password');
+            return;
         }
     }
 
     // 4. Implicit flow: hash tokens auto-detected by the client on init.
     //    Give it a beat to settle, then check.
     setTimeout(async () => {
-        const { data } = await supabase.auth.getSession()
+        const { data } = await supabase.auth.getSession();
         if (data.session) {
-            router.push('/browse?welcome=1')
+            router.push('/browse?welcome=1');
         } else {
             error.value =
-                "We couldn't confirm your account. The link may have expired or already been used."
+                "We couldn't confirm your account. The link may have expired or already been used.";
         }
-    }, 1500)
+    }, 1500);
 }
 
-onMounted(processCallback)
+onMounted(processCallback);
 
 watchEffect(() => {
-    if (user.value) router.push('/browse?welcome=1')
-})
+    if (user.value) router.push('/browse?welcome=1');
+});
 </script>
 
 <template>

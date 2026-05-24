@@ -1,35 +1,38 @@
 <script setup lang="ts">
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
-const user = useSupabaseUser()
-const supabase = useSupabaseClient()
-const unread = useUnreadCount()
-const unreadCount = unread.count
+const user = useSupabaseUser();
+const supabase = useSupabaseClient();
+const unread = useUnreadCount();
+const unreadCount = unread.count;
 
-const route = useRoute()
-const menuOpen = ref(false)
+const route = useRoute();
+const menuOpen = ref(false);
 
 // Sign the user out after 1 hour of mouse / keyboard / touch / scroll
 // inactivity. Layout-level so it covers every page; the composable is
 // a no-op when no user is signed in.
-useIdleSignout()
+useIdleSignout();
 
 // Close mobile menu on every navigation.
-watch(() => route.fullPath, () => {
-    menuOpen.value = false
-})
+watch(
+    () => route.fullPath,
+    () => {
+        menuOpen.value = false;
+    },
+);
 
-let channel: RealtimeChannel | null = null
+let channel: RealtimeChannel | null = null;
 
 function teardownChannel() {
-    if (channel) supabase.removeChannel(channel)
-    channel = null
+    if (channel) supabase.removeChannel(channel);
+    channel = null;
 }
 
 function subscribeUnread() {
-    teardownChannel()
-    if (!user.value) return
-    const me = user.value.id
+    teardownChannel();
+    if (!user.value) return;
+    const me = user.value.id;
     channel = supabase
         .channel('layout-unread')
         .on(
@@ -38,8 +41,8 @@ function subscribeUnread() {
             (payload) => {
                 // Brand-new messages are unread by definition; only count
                 // ones the other person sent. Avoids a count(*) refetch.
-                const m = payload.new as { sender_id: string }
-                if (m.sender_id !== me) unread.incrementUnread()
+                const m = payload.new as { sender_id: string };
+                if (m.sender_id !== me) unread.incrementUnread();
             },
         )
         .on(
@@ -50,28 +53,28 @@ function subscribeUnread() {
                 // on messages is the recipient flipping `read_at`. Each
                 // such event is exactly one unread → read transition for a
                 // message we received. No need to refetch.
-                const m = payload.new as { sender_id: string }
-                if (m.sender_id !== me) unread.decrementUnread()
+                const m = payload.new as { sender_id: string };
+                if (m.sender_id !== me) unread.decrementUnread();
             },
         )
-        .subscribe()
+        .subscribe();
 }
 
 watch(
     user,
     () => {
-        unread.refresh()
-        subscribeUnread()
+        unread.refresh();
+        subscribeUnread();
     },
     { immediate: true },
-)
+);
 
-onBeforeUnmount(teardownChannel)
+onBeforeUnmount(teardownChannel);
 
 async function signOut() {
-    menuOpen.value = false
-    await supabase.auth.signOut()
-    await navigateTo('/')
+    menuOpen.value = false;
+    await supabase.auth.signOut();
+    await navigateTo('/');
 }
 </script>
 
@@ -79,10 +82,7 @@ async function signOut() {
     <div class="flex min-h-screen flex-col">
         <header class="sticky top-0 z-30 border-b border-orange-100 bg-white/90 backdrop-blur">
             <nav class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-                <NuxtLink
-                    to="/"
-                    class="font-display text-lg font-bold text-brand-600 sm:text-xl"
-                >
+                <NuxtLink to="/" class="font-display text-lg font-bold text-brand-600 sm:text-xl">
                     Garage Sale Tracker
                 </NuxtLink>
 
@@ -145,7 +145,10 @@ async function signOut() {
                         >
                             Sign in
                         </NuxtLink>
-                        <NuxtLink to="/signup" class="btn-primary !min-h-[40px] !px-4 !py-2 text-sm">
+                        <NuxtLink
+                            to="/signup"
+                            class="btn-primary !min-h-[40px] !px-4 !py-2 text-sm"
+                        >
                             Sign up
                         </NuxtLink>
                     </template>
@@ -167,7 +170,11 @@ async function signOut() {
                         stroke-width="2"
                         viewBox="0 0 24 24"
                     >
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M4 6h16M4 12h16M4 18h16"
+                        />
                     </svg>
                     <svg
                         v-else
@@ -177,7 +184,11 @@ async function signOut() {
                         stroke-width="2"
                         viewBox="0 0 24 24"
                     >
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6" />
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M6 6l12 12M6 18L18 6"
+                        />
                     </svg>
                     <span
                         v-if="user && unreadCount > 0 && !menuOpen"
@@ -197,10 +208,7 @@ async function signOut() {
                 leave-from-class="opacity-100 translate-y-0"
                 leave-to-class="opacity-0 -translate-y-2"
             >
-                <div
-                    v-if="menuOpen"
-                    class="border-t border-orange-100 bg-white md:hidden"
-                >
+                <div v-if="menuOpen" class="border-t border-orange-100 bg-white md:hidden">
                     <div class="mx-auto flex max-w-6xl flex-col gap-1 px-3 py-3">
                         <NuxtLink
                             to="/browse"
@@ -285,8 +293,8 @@ async function signOut() {
                 <div>
                     <p>Garage Sale Tracker — find and route the weekend's best stops.</p>
                     <p class="mt-1 text-xs text-gray-500">
-                        Sales are posted by community members. We don't verify listings —
-                        please use your judgment when visiting an address you've never been to.
+                        Sales are posted by community members. We don't verify listings — please use
+                        your judgment when visiting an address you've never been to.
                     </p>
                     <p class="mt-1 text-xs text-gray-500">
                         This app is still evolving. Got a feature request or bug?

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-const { toasts, dismiss } = useToast()
+const { toasts, dismiss } = useToast();
 
 function toneClass(tone: string) {
-    if (tone === 'error') return 'bg-red-50 text-red-900 ring-red-200'
-    if (tone === 'success') return 'bg-green-50 text-green-900 ring-green-200'
-    return 'bg-sky-50 text-sky-900 ring-sky-200'
+    if (tone === 'error') return 'bg-red-50 text-red-900 ring-red-200';
+    if (tone === 'success') return 'bg-green-50 text-green-900 ring-green-200';
+    return 'bg-sky-50 text-sky-900 ring-sky-200';
 }
 </script>
 

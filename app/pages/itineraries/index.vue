@@ -1,44 +1,42 @@
 <script setup lang="ts">
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const router = useRouter()
-const toast = useToast()
-const { confirm } = useConfirm()
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
+const toast = useToast();
+const { confirm } = useConfirm();
 
-const { unsave, refresh: refreshSavedIds } = useSavedSales()
+const { unsave, refresh: refreshSavedIds } = useSavedSales();
 
-const today = todayLocalISO()
+const today = todayLocalISO();
 
 // Run the two page-level fetches in parallel — sequentially they
 // waterfall on slow networks for no reason. Each useAsyncData keeps
 // its own refresh() so a saved-sale removal / route delete only
 // re-runs the relevant query.
-const [
-    { data: savedSales, refresh: refreshSaved },
-    { data: routes, refresh: refreshRoutes },
-] = await Promise.all([
-    useAsyncData('saved-sales-detail', () => fetchSavedSalesWithDetails()),
-    useAsyncData('my-routes', () => fetchRoutes()),
-])
+const [{ data: savedSales, refresh: refreshSaved }, { data: routes, refresh: refreshRoutes }] =
+    await Promise.all([
+        useAsyncData('saved-sales-detail', () => fetchSavedSalesWithDetails()),
+        useAsyncData('my-routes', () => fetchRoutes()),
+    ]);
 
 onMounted(() => {
-    refreshSavedIds()
-})
+    refreshSavedIds();
+});
 
-const newRouteName = ref('')
-const newRouteDate = ref('')
-const creating = ref(false)
-const createError = ref<string | null>(null)
+const newRouteName = ref('');
+const newRouteDate = ref('');
+const creating = ref(false);
+const createError = ref<string | null>(null);
 
 async function createRoute() {
-    if (!user.value) return
-    if (!newRouteName.value.trim() || !newRouteDate.value) return
+    if (!user.value) return;
+    if (!newRouteName.value.trim() || !newRouteDate.value) return;
     if (newRouteDate.value < today) {
-        createError.value = "Route date can't be in the past."
-        return
+        createError.value = "Route date can't be in the past.";
+        return;
     }
-    creating.value = true
-    createError.value = null
+    creating.value = true;
+    createError.value = null;
     const { data, error } = await supabase
         .from('routes')
         .insert({
@@ -47,26 +45,26 @@ async function createRoute() {
             route_date: newRouteDate.value,
         })
         .select('id')
-        .single()
-    creating.value = false
+        .single();
+    creating.value = false;
     if (error) {
-        createError.value = error.message
-        return
+        createError.value = error.message;
+        return;
     }
-    router.push(`/itineraries/${data.id}`)
+    router.push(`/itineraries/${data.id}`);
 }
 
 async function removeSaved(saleId: string) {
     const ok = await confirm({
         title: 'Remove from saved sales?',
-        description: "You can re-add it from the map any time.",
+        description: 'You can re-add it from the map any time.',
         confirmText: 'Remove',
         tone: 'danger',
-    })
-    if (!ok) return
-    await unsave(saleId)
-    refreshSaved()
-    toast.success('Removed from saved sales.')
+    });
+    if (!ok) return;
+    await unsave(saleId);
+    refreshSaved();
+    toast.success('Removed from saved sales.');
 }
 
 async function deleteRoute(id: string) {
@@ -75,15 +73,15 @@ async function deleteRoute(id: string) {
         description: 'This cannot be undone.',
         confirmText: 'Delete',
         tone: 'danger',
-    })
-    if (!ok) return
-    const { error } = await supabase.from('routes').delete().eq('id', id)
+    });
+    if (!ok) return;
+    const { error } = await supabase.from('routes').delete().eq('id', id);
     if (error) {
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
     }
-    toast.success('Route deleted.')
-    refreshRoutes()
+    toast.success('Route deleted.');
+    refreshRoutes();
 }
 
 // Show every saved sale, including expired and removed ones — each
@@ -92,15 +90,15 @@ async function deleteRoute(id: string) {
 // for ~30 days then cron-purges (cascade-drops the saved row);
 // expired entries persist until the user removes them or the cron
 // finally deletes the past-end-dated sale.
-const displayedSavedSales = computed(() =>
-    (savedSales.value ?? []).filter((s) => s.sale),
-)
+const displayedSavedSales = computed(() => (savedSales.value ?? []).filter((s) => s.sale));
 </script>
 
 <template>
     <section class="mx-auto max-w-4xl px-4 py-8">
         <h1 class="font-display text-3xl font-bold text-gray-900">Your itineraries</h1>
-        <p class="mt-2 text-gray-600">Save sales you'd like to visit, then plan a route for the day.</p>
+        <p class="mt-2 text-gray-600">
+            Save sales you'd like to visit, then plan a route for the day.
+        </p>
 
         <!-- ============================================================ -->
         <!-- Saved sales                                                  -->
@@ -108,8 +106,8 @@ const displayedSavedSales = computed(() =>
         <section class="mt-8">
             <h2 class="font-display text-xl font-bold text-gray-900">Your saved sales</h2>
             <p class="mt-1 text-sm text-gray-600">
-                Sales you've tapped <em>Let's go!</em> on. Ended sales show in yellow,
-                and ones the owner removed show in red — clear them with <em>Remove</em>
+                Sales you've tapped <em>Let's go!</em> on. Ended sales show in yellow, and ones the
+                owner removed show in red — clear them with <em>Remove</em>
                 when you're done.
             </p>
 
@@ -145,10 +143,7 @@ const displayedSavedSales = computed(() =>
                         >
                             {{ row.sale.title }}
                         </NuxtLink>
-                        <span
-                            v-else
-                            class="font-medium text-gray-700 line-through"
-                        >
+                        <span v-else class="font-medium text-gray-700 line-through">
                             {{ row.sale.title }}
                         </span>
                         <div class="mt-0.5 text-xs text-gray-600">{{ row.sale.address }}</div>
@@ -165,7 +160,10 @@ const displayedSavedSales = computed(() =>
                 </li>
             </ul>
 
-            <p v-else class="mt-4 rounded-xl bg-white p-4 text-sm text-gray-600 ring-1 ring-orange-100">
+            <p
+                v-else
+                class="mt-4 rounded-xl bg-white p-4 text-sm text-gray-600 ring-1 ring-orange-100"
+            >
                 No saved sales yet. Browse the
                 <NuxtLink to="/browse" class="text-sky-700 hover:underline">map</NuxtLink>
                 and click <em>Let's go!</em> on the ones you'd like to visit.
@@ -192,13 +190,7 @@ const displayedSavedSales = computed(() =>
                     required
                     class="input"
                 />
-                <input
-                    v-model="newRouteDate"
-                    type="date"
-                    required
-                    :min="today"
-                    class="input"
-                />
+                <input v-model="newRouteDate" type="date" required :min="today" class="input" />
                 <button
                     type="submit"
                     class="btn-primary"

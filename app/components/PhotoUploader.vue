@@ -1,15 +1,15 @@
 <script setup lang="ts">
-const MAX_PHOTOS = 10
+const MAX_PHOTOS = 10;
 
 const props = defineProps<{
-    modelValue: string[]
-}>()
+    modelValue: string[];
+}>();
 
 const emit = defineEmits<{
-    (e: 'update:modelValue', urls: string[]): void
-}>()
+    (e: 'update:modelValue', urls: string[]): void;
+}>();
 
-const { uploadPhoto, deletePhotos } = useSalePhotos()
+const { uploadPhoto, deletePhotos } = useSalePhotos();
 
 // Snapshot of URLs that were already saved on the parent's record at
 // component mount. URLs in this set are "committed" and removing them
@@ -17,122 +17,122 @@ const { uploadPhoto, deletePhotos } = useSalePhotos()
 // after a successful save (or revert them on cancel by keeping the
 // file). URLs uploaded *during this session* are not in this set, so
 // removing them deletes immediately — they were never saved anywhere.
-const initialUrls = new Set(props.modelValue)
-const pendingDeletes = ref<string[]>([])
+const initialUrls = new Set(props.modelValue);
+const pendingDeletes = ref<string[]>([]);
 
-const fileInput = ref<HTMLInputElement | null>(null)
-const uploading = ref(false)
-const error = ref<string | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null);
+const uploading = ref(false);
+const error = ref<string | null>(null);
 
-const dragActive = ref(false)
-let dragDepth = 0
+const dragActive = ref(false);
+let dragDepth = 0;
 
-const remainingSlots = computed(() => Math.max(0, MAX_PHOTOS - props.modelValue.length))
-const limitReached = computed(() => remainingSlots.value === 0)
+const remainingSlots = computed(() => Math.max(0, MAX_PHOTOS - props.modelValue.length));
+const limitReached = computed(() => remainingSlots.value === 0);
 
 async function processFiles(files: File[]) {
-    if (files.length === 0) return
-    error.value = null
+    if (files.length === 0) return;
+    error.value = null;
 
-    let toUpload = files
+    let toUpload = files;
     if (toUpload.length > remainingSlots.value) {
-        const dropped = toUpload.length - remainingSlots.value
-        toUpload = toUpload.slice(0, remainingSlots.value)
-        error.value = `Only ${remainingSlots.value} more photo${remainingSlots.value === 1 ? '' : 's'} fits — ${dropped} skipped.`
+        const dropped = toUpload.length - remainingSlots.value;
+        toUpload = toUpload.slice(0, remainingSlots.value);
+        error.value = `Only ${remainingSlots.value} more photo${remainingSlots.value === 1 ? '' : 's'} fits — ${dropped} skipped.`;
     }
     if (toUpload.length === 0) {
-        if (limitReached.value) error.value = `You've hit the ${MAX_PHOTOS}-photo limit.`
-        if (fileInput.value) fileInput.value.value = ''
-        return
+        if (limitReached.value) error.value = `You've hit the ${MAX_PHOTOS}-photo limit.`;
+        if (fileInput.value) fileInput.value.value = '';
+        return;
     }
 
-    uploading.value = true
+    uploading.value = true;
     try {
         // Separate non-image files first so they don't poison the upload
         // pool; track them for a single combined error message.
-        const validFiles: File[] = []
-        const messages: string[] = []
+        const validFiles: File[] = [];
+        const messages: string[] = [];
         for (const f of toUpload) {
-            if (f.type.startsWith('image/')) validFiles.push(f)
-            else messages.push(`${f.name} isn't an image — skipped.`)
+            if (f.type.startsWith('image/')) validFiles.push(f);
+            else messages.push(`${f.name} isn't an image — skipped.`);
         }
 
         // Upload in parallel with a small concurrency cap — Supabase Storage
         // handles concurrent puts fine, but we don't want to slam slow
         // connections with 10-at-once. Use allSettled so one failure
         // doesn't kill the rest of the batch.
-        const concurrency = 3
-        const newUrls: string[] = []
+        const concurrency = 3;
+        const newUrls: string[] = [];
         for (let i = 0; i < validFiles.length; i += concurrency) {
-            const chunk = validFiles.slice(i, i + concurrency)
-            const results = await Promise.allSettled(chunk.map((f) => uploadPhoto(f)))
+            const chunk = validFiles.slice(i, i + concurrency);
+            const results = await Promise.allSettled(chunk.map((f) => uploadPhoto(f)));
             results.forEach((r, j) => {
                 if (r.status === 'fulfilled') {
-                    newUrls.push(r.value)
+                    newUrls.push(r.value);
                 } else {
-                    const why = r.reason instanceof Error ? r.reason.message : 'upload failed'
-                    messages.push(`${chunk[j]!.name}: ${why}`)
+                    const why = r.reason instanceof Error ? r.reason.message : 'upload failed';
+                    messages.push(`${chunk[j]!.name}: ${why}`);
                 }
-            })
+            });
         }
 
-        if (newUrls.length) emit('update:modelValue', [...props.modelValue, ...newUrls])
+        if (newUrls.length) emit('update:modelValue', [...props.modelValue, ...newUrls]);
         if (messages.length) {
-            error.value = (error.value ? error.value + ' ' : '') + messages.join(' ')
+            error.value = (error.value ? error.value + ' ' : '') + messages.join(' ');
         }
     } finally {
-        uploading.value = false
-        if (fileInput.value) fileInput.value.value = ''
+        uploading.value = false;
+        if (fileInput.value) fileInput.value.value = '';
     }
 }
 
 async function onPicked(ev: Event) {
-    const input = ev.target as HTMLInputElement
-    if (!input.files || input.files.length === 0) return
-    await processFiles(Array.from(input.files))
+    const input = ev.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    await processFiles(Array.from(input.files));
 }
 
 function onDragEnter(ev: DragEvent) {
-    if (!ev.dataTransfer) return
-    const hasFiles = Array.from(ev.dataTransfer.items ?? []).some((i) => i.kind === 'file')
-    if (!hasFiles) return
-    dragDepth++
-    dragActive.value = true
+    if (!ev.dataTransfer) return;
+    const hasFiles = Array.from(ev.dataTransfer.items ?? []).some((i) => i.kind === 'file');
+    if (!hasFiles) return;
+    dragDepth++;
+    dragActive.value = true;
 }
 
 function onDragOver(ev: DragEvent) {
-    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy';
 }
 
 function onDragLeave() {
-    dragDepth = Math.max(0, dragDepth - 1)
-    if (dragDepth === 0) dragActive.value = false
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dragActive.value = false;
 }
 
 async function onDrop(ev: DragEvent) {
-    dragDepth = 0
-    dragActive.value = false
-    const files = ev.dataTransfer?.files
-    if (!files || files.length === 0) return
-    await processFiles(Array.from(files))
+    dragDepth = 0;
+    dragActive.value = false;
+    const files = ev.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    await processFiles(Array.from(files));
 }
 
 async function removeAt(idx: number) {
-    const url = props.modelValue[idx]
-    if (!url) return
-    const next = props.modelValue.slice()
-    next.splice(idx, 1)
-    emit('update:modelValue', next)
+    const url = props.modelValue[idx];
+    if (!url) return;
+    const next = props.modelValue.slice();
+    next.splice(idx, 1);
+    emit('update:modelValue', next);
     if (initialUrls.has(url)) {
         // Existing photo on a saved record — defer the storage delete
         // until the parent calls commitPendingDeletes() on submit
         // success. If the user cancels, the file stays and the saved
         // record's photos[] still resolves correctly.
-        pendingDeletes.value.push(url)
+        pendingDeletes.value.push(url);
     } else {
         // Uploaded during this session and never saved — safe to drop
         // from storage immediately.
-        deletePhotos([url]).catch(() => {})
+        deletePhotos([url]).catch(() => {});
     }
 }
 
@@ -142,16 +142,16 @@ async function removeAt(idx: number) {
  * empty (e.g., the user only added new photos).
  */
 async function commitPendingDeletes() {
-    if (pendingDeletes.value.length === 0) return
-    const urls = pendingDeletes.value.slice()
-    pendingDeletes.value = []
-    await deletePhotos(urls).catch(() => {})
+    if (pendingDeletes.value.length === 0) return;
+    const urls = pendingDeletes.value.slice();
+    pendingDeletes.value = [];
+    await deletePhotos(urls).catch(() => {});
 }
 
-defineExpose({ commitPendingDeletes })
+defineExpose({ commitPendingDeletes });
 
 function pick() {
-    fileInput.value?.click()
+    fileInput.value?.click();
 }
 </script>
 

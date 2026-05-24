@@ -1,49 +1,48 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
-import type { RouteStop } from '~/composables/useRoutes'
-import type { EndMode, OptimizedRoute, RouteEnd } from '~/composables/useRouteOptimizer'
-import draggable from 'vuedraggable'
+import type { GarageSale } from '~/composables/useGarageSales';
+import type { RouteStop } from '~/composables/useRoutes';
+import type { EndMode, OptimizedRoute, RouteEnd } from '~/composables/useRouteOptimizer';
+import draggable from 'vuedraggable';
 
-const route = useRoute()
-const supabase = useSupabaseClient()
-const router = useRouter()
+const route = useRoute();
+const supabase = useSupabaseClient();
+const router = useRouter();
 
-const id = route.params.id as string
+const id = route.params.id as string;
 
-const config = useRuntimeConfig()
-const toast = useToast()
-const { confirm } = useConfirm()
+const config = useRuntimeConfig();
+const toast = useToast();
+const { confirm } = useConfirm();
 
 // Two-way sync between the saved-sale cards and their map pins.
-const selectedAvailableId = ref<string | null>(null)
-const hoveredAvailableId = ref<string | null>(null)
+const selectedAvailableId = ref<string | null>(null);
+const hoveredAvailableId = ref<string | null>(null);
 
 function selectAvailable(saleId: string) {
-    selectedAvailableId.value = saleId
+    selectedAvailableId.value = saleId;
 }
 function onHoverAvailable(saleId: string | null) {
-    hoveredAvailableId.value = saleId
+    hoveredAvailableId.value = saleId;
 }
 function clearAvailableSelection() {
-    selectedAvailableId.value = null
-    hoveredAvailableId.value = null
+    selectedAvailableId.value = null;
+    hoveredAvailableId.value = null;
 }
 
 // ============================================================================
 // Data
 // ============================================================================
 const { data, refresh } = await useAsyncData(`route-${id}`, async () => {
-    const result = await fetchRouteWithStops(id)
+    const result = await fetchRouteWithStops(id);
     if (!result) {
-        throw createError({ statusCode: 404, statusMessage: 'Route not found' })
+        throw createError({ statusCode: 404, statusMessage: 'Route not found' });
     }
-    return result
-})
+    return result;
+});
 
-const { data: savedSales, refresh: refreshSaved } = await useAsyncData(
-    'route-saved-sales',
-    () => fetchSavedSalesWithDetails(),
-)
+const { data: savedSales, refresh: refreshSaved } = await useAsyncData('route-saved-sales', () =>
+    fetchSavedSalesWithDetails(),
+);
 
 // Saved sales available on this route's date that haven't been added yet.
 // Removed (soft-deleted) sales are excluded — you can't add a tombstone to a
@@ -54,37 +53,37 @@ const { data: savedSales, refresh: refreshSaved } = await useAsyncData(
 // not the envelope — a sale with non-contiguous days (Weekend 1 + 2)
 // shouldn't appear as available on the gap days inside its envelope.
 const availableSaved = computed(() => {
-    if (!data.value) return []
-    const inRoute = new Set(data.value.stops.map((s) => s.garage_sale_id))
-    const day = data.value.route.route_date
+    if (!data.value) return [];
+    const inRoute = new Set(data.value.stops.map((s) => s.garage_sale_id));
+    const day = data.value.route.route_date;
     return (savedSales.value ?? [])
         .filter((row) => !inRoute.has(row.garage_sale_id))
         .filter((row) => !isRemovedSale(row.sale))
-        .filter((row) => findSaleDateOn(row.sale, day) !== null)
-})
+        .filter((row) => findSaleDateOn(row.sale, day) !== null);
+});
 
 // Just the GarageSale objects for the map's available-pin prop, memoized so
 // the prop reference is stable between renders (otherwise the deep watcher
 // in RouteMap tears down + recreates markers on every reactive update,
 // which kills the user's hover state).
-const availableSales = computed(() => availableSaved.value.map((row) => row.sale))
+const availableSales = computed(() => availableSaved.value.map((row) => row.sale));
 
 // ============================================================================
 // Manual ordering
 // ============================================================================
 async function addToRoute(saleId: string) {
-    if (!data.value) return
-    const stops = data.value.stops
-    const nextPos = (stops.length === 0 ? 0 : stops[stops.length - 1]!.position) + 1
+    if (!data.value) return;
+    const stops = data.value.stops;
+    const nextPos = (stops.length === 0 ? 0 : stops[stops.length - 1]!.position) + 1;
     const { error } = await supabase
         .from('route_stops')
-        .insert({ route_id: id, garage_sale_id: saleId, position: nextPos })
+        .insert({ route_id: id, garage_sale_id: saleId, position: nextPos });
     if (error) {
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
     }
-    invalidateOptimization()
-    await refresh()
+    invalidateOptimization();
+    await refresh();
 }
 
 async function removeStop(saleId: string) {
@@ -93,170 +92,170 @@ async function removeStop(saleId: string) {
         description: "It'll come out of the route order. You can re-add it from your saved sales.",
         confirmText: 'Remove',
         tone: 'danger',
-    })
-    if (!ok) return
+    });
+    if (!ok) return;
     const { error } = await supabase
         .from('route_stops')
         .delete()
         .eq('route_id', id)
-        .eq('garage_sale_id', saleId)
+        .eq('garage_sale_id', saleId);
     if (error) {
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
     }
-    invalidateOptimization()
-    await refresh()
+    invalidateOptimization();
+    await refresh();
 }
 
 // Local mirror of the displayed stop list, used as v-model for vuedraggable.
 // We keep it in sync with the server-side order until the user drags, then
 // persist whatever new order they ended up with.
-const draggableStops = ref<RouteStop[]>([])
-const persisting = ref(false)
+const draggableStops = ref<RouteStop[]>([]);
+const persisting = ref(false);
 
 async function persistDraggedOrder() {
-    if (!data.value || persisting.value) return
+    if (!data.value || persisting.value) return;
     const updates = draggableStops.value.map((s, i) => ({
         route_id: id,
         garage_sale_id: s.garage_sale_id,
         position: i + 1,
-    }))
-    persisting.value = true
-    const { error } = await supabase.from('route_stops').upsert(updates)
-    persisting.value = false
+    }));
+    persisting.value = true;
+    const { error } = await supabase.from('route_stops').upsert(updates);
+    persisting.value = false;
     if (error) {
-        toast.error(error.message)
-        await refresh()
-        return
+        toast.error(error.message);
+        await refresh();
+        return;
     }
-    invalidateOptimization()
-    await refresh()
+    invalidateOptimization();
+    await refresh();
 }
 
 // ============================================================================
 // Optimize
 // ============================================================================
-type StartMode = 'location' | 'address'
-const startMode = ref<StartMode>('location')
-const startAddress = ref('')
-const startResolved = ref<{ lng: number; lat: number; label?: string } | null>(null)
-const startAddressLabel = ref<string | null>(null)
-const capturingLocation = ref(false)
-const geocodingStart = ref(false)
+type StartMode = 'location' | 'address';
+const startMode = ref<StartMode>('location');
+const startAddress = ref('');
+const startResolved = ref<{ lng: number; lat: number; label?: string } | null>(null);
+const startAddressLabel = ref<string | null>(null);
+const capturingLocation = ref(false);
+const geocodingStart = ref(false);
 
-const departureTime = ref('08:00')
+const departureTime = ref('08:00');
 
 // End-location state. Backed by the route row's end_mode / end_address /
 // end_lat / end_lng columns so the choice persists across reloads and the
 // share page reflects it. Default 'round_trip' for legacy rows.
-const endMode = ref<EndMode>(data.value?.route.end_mode ?? 'round_trip')
-const endAddress = ref(data.value?.route.end_address ?? '')
+const endMode = ref<EndMode>(data.value?.route.end_mode ?? 'round_trip');
+const endAddress = ref(data.value?.route.end_address ?? '');
 const endResolved = ref<{ lng: number; lat: number } | null>(
     data.value?.route.end_lat != null && data.value?.route.end_lng != null
         ? { lng: data.value.route.end_lng, lat: data.value.route.end_lat }
         : null,
-)
-const geocodingEnd = ref(false)
+);
+const geocodingEnd = ref(false);
 
-const optimizedOrder = ref<number[] | null>(null)
-const routeGeometry = ref<GeoJSON.LineString | null>(null)
-const totalDistanceMi = ref<number | null>(null)
-const totalDriveMin = ref<number | null>(null)
-const timeline = ref<TimelineEntry[] | null>(null)
+const optimizedOrder = ref<number[] | null>(null);
+const routeGeometry = ref<GeoJSON.LineString | null>(null);
+const totalDistanceMi = ref<number | null>(null);
+const totalDriveMin = ref<number | null>(null);
+const timeline = ref<TimelineEntry[] | null>(null);
 // Trailing-leg duration: drive home (round trip) OR drive to custom end.
-const returnLegMin = ref<number | null>(null)
-const endLegMin = ref<number | null>(null)
-const trailingArriveAt = ref<Date | null>(null)
+const returnLegMin = ref<number | null>(null);
+const endLegMin = ref<number | null>(null);
+const trailingArriveAt = ref<Date | null>(null);
 
-const optimizing = ref(false)
-const optimizeError = ref<string | null>(null)
+const optimizing = ref(false);
+const optimizeError = ref<string | null>(null);
 
 function invalidateOptimization() {
-    optimizedOrder.value = null
-    routeGeometry.value = null
-    totalDistanceMi.value = null
-    totalDriveMin.value = null
-    timeline.value = null
-    returnLegMin.value = null
-    endLegMin.value = null
-    trailingArriveAt.value = null
+    optimizedOrder.value = null;
+    routeGeometry.value = null;
+    totalDistanceMi.value = null;
+    totalDriveMin.value = null;
+    timeline.value = null;
+    returnLegMin.value = null;
+    endLegMin.value = null;
+    trailingArriveAt.value = null;
 }
 
 async function captureLocation() {
-    optimizeError.value = null
-    startAddressLabel.value = null
-    capturingLocation.value = true
+    optimizeError.value = null;
+    startAddressLabel.value = null;
+    capturingLocation.value = true;
     try {
-        const pos = await getCurrentPosition()
-        startResolved.value = { lng: pos.lng, lat: pos.lat, label: 'You' }
+        const pos = await getCurrentPosition();
+        startResolved.value = { lng: pos.lng, lat: pos.lat, label: 'You' };
         // Reverse geocode so the user can verify the location is right
         // (browser geolocation on desktop often resolves to the ISP edge).
         try {
-            startAddressLabel.value = await reverseGeocode(pos.lng, pos.lat)
+            startAddressLabel.value = await reverseGeocode(pos.lng, pos.lat);
         } catch {
             // Non-blocking — the route still works without the human-readable address.
         }
     } catch (e) {
-        optimizeError.value = e instanceof Error ? e.message : 'Could not get location'
+        optimizeError.value = e instanceof Error ? e.message : 'Could not get location';
     } finally {
-        capturingLocation.value = false
+        capturingLocation.value = false;
     }
 }
 
 async function geocodeStart() {
-    optimizeError.value = null
-    startAddressLabel.value = null
+    optimizeError.value = null;
+    startAddressLabel.value = null;
     if (!startAddress.value.trim()) {
-        optimizeError.value = 'Enter a starting address.'
-        return
+        optimizeError.value = 'Enter a starting address.';
+        return;
     }
-    geocodingStart.value = true
+    geocodingStart.value = true;
     try {
-        const result = await geocodeAddress(startAddress.value.trim())
+        const result = await geocodeAddress(startAddress.value.trim());
         if (!result) {
-            optimizeError.value = "Couldn't find that address."
-            startResolved.value = null
-            return
+            optimizeError.value = "Couldn't find that address.";
+            startResolved.value = null;
+            return;
         }
-        startResolved.value = { lng: result.lng, lat: result.lat, label: 'Start' }
-        startAddress.value = result.address
+        startResolved.value = { lng: result.lng, lat: result.lat, label: 'Start' };
+        startAddress.value = result.address;
     } catch (e) {
-        optimizeError.value = e instanceof Error ? e.message : 'Geocoding failed'
+        optimizeError.value = e instanceof Error ? e.message : 'Geocoding failed';
     } finally {
-        geocodingStart.value = false
+        geocodingStart.value = false;
     }
 }
 
 async function geocodeEnd() {
-    optimizeError.value = null
+    optimizeError.value = null;
     if (!endAddress.value.trim()) {
-        optimizeError.value = 'Enter an end address.'
-        return
+        optimizeError.value = 'Enter an end address.';
+        return;
     }
-    geocodingEnd.value = true
+    geocodingEnd.value = true;
     try {
-        const result = await geocodeAddress(endAddress.value.trim())
+        const result = await geocodeAddress(endAddress.value.trim());
         if (!result) {
-            optimizeError.value = "Couldn't find that end address."
-            endResolved.value = null
-            return
+            optimizeError.value = "Couldn't find that end address.";
+            endResolved.value = null;
+            return;
         }
-        endResolved.value = { lng: result.lng, lat: result.lat }
-        endAddress.value = result.address
-        invalidateOptimization()
-        await persistEndChoice()
+        endResolved.value = { lng: result.lng, lat: result.lat };
+        endAddress.value = result.address;
+        invalidateOptimization();
+        await persistEndChoice();
     } catch (e) {
-        optimizeError.value = e instanceof Error ? e.message : 'Geocoding failed'
+        optimizeError.value = e instanceof Error ? e.message : 'Geocoding failed';
     } finally {
-        geocodingEnd.value = false
+        geocodingEnd.value = false;
     }
 }
 
 async function setEndMode(mode: EndMode) {
-    if (endMode.value === mode) return
-    endMode.value = mode
-    invalidateOptimization()
-    await persistEndChoice()
+    if (endMode.value === mode) return;
+    endMode.value = mode;
+    invalidateOptimization();
+    await persistEndChoice();
 }
 
 /**
@@ -265,58 +264,58 @@ async function setEndMode(mode: EndMode) {
  * on failure (the user can re-pick — local state remains usable).
  */
 async function persistEndChoice() {
-    if (!data.value) return
+    if (!data.value) return;
     // The routes_end_address_coords_check constraint rejects rows where
     // end_mode = 'address' without end_lat/end_lng. Selecting the pill
     // before entering an address is a valid intermediate UI state, so
     // skip the save until geocodeEnd() has resolved coords.
-    if (endMode.value === 'address' && !endResolved.value) return
+    if (endMode.value === 'address' && !endResolved.value) return;
     const payload = {
         end_mode: endMode.value,
         end_address: endMode.value === 'address' ? endAddress.value || null : null,
         end_lat: endMode.value === 'address' && endResolved.value ? endResolved.value.lat : null,
         end_lng: endMode.value === 'address' && endResolved.value ? endResolved.value.lng : null,
-    }
-    const { error } = await supabase.from('routes').update(payload).eq('id', id)
+    };
+    const { error } = await supabase.from('routes').update(payload).eq('id', id);
     if (error) {
-        toast.error(`Couldn't save end choice: ${error.message}`)
+        toast.error(`Couldn't save end choice: ${error.message}`);
     }
 }
 
 /** Translate the local UI state into the optimizer's RouteEnd contract. */
 function currentRouteEnd(): RouteEnd {
     if (endMode.value === 'address') {
-        if (!endResolved.value) throw new Error('Set the end address first.')
-        return { mode: 'address', coord: endResolved.value }
+        if (!endResolved.value) throw new Error('Set the end address first.');
+        return { mode: 'address', coord: endResolved.value };
     }
-    return { mode: endMode.value }
+    return { mode: endMode.value };
 }
 
 function applyRouteResult(result: OptimizedRoute, opts: { reorder: boolean }) {
-    optimizedOrder.value = opts.reorder ? result.stopOrder : null
-    routeGeometry.value = result.geometry
-    totalDistanceMi.value = result.distanceMeters / 1609.344
-    totalDriveMin.value = result.durationSeconds / 60
-    returnLegMin.value = result.returnLeg ? result.returnLeg.durationSeconds / 60 : null
-    endLegMin.value = result.endLeg ? result.endLeg.durationSeconds / 60 : null
+    optimizedOrder.value = opts.reorder ? result.stopOrder : null;
+    routeGeometry.value = result.geometry;
+    totalDistanceMi.value = result.distanceMeters / 1609.344;
+    totalDriveMin.value = result.durationSeconds / 60;
+    returnLegMin.value = result.returnLeg ? result.returnLeg.durationSeconds / 60 : null;
+    endLegMin.value = result.endLeg ? result.endLeg.durationSeconds / 60 : null;
 
-    const [hh, mm] = departureTime.value.split(':').map(Number)
-    const departure = new Date(data.value!.route.route_date + 'T00:00:00')
-    departure.setHours(hh ?? 8, mm ?? 0, 0, 0)
+    const [hh, mm] = departureTime.value.split(':').map(Number);
+    const departure = new Date(data.value!.route.route_date + 'T00:00:00');
+    departure.setHours(hh ?? 8, mm ?? 0, 0, 0);
     // Use stopLegs (excludes the trailing leg) so the timeline only shows
     // arrivals at actual stops.
-    timeline.value = buildTimeline(result.stopLegs, departure, 30)
+    timeline.value = buildTimeline(result.stopLegs, departure, 30);
 
     // Trailing-leg arrival: arrival back home (round trip) OR arrival at the
     // custom end address. Only one of returnLeg / endLeg is ever non-null.
-    const trailing = result.returnLeg ?? result.endLeg
+    const trailing = result.returnLeg ?? result.endLeg;
     if (trailing && timeline.value.length > 0) {
-        const lastStop = timeline.value[timeline.value.length - 1]!
+        const lastStop = timeline.value[timeline.value.length - 1]!;
         trailingArriveAt.value = new Date(
             lastStop.departAt.getTime() + trailing.durationSeconds * 1000,
-        )
+        );
     } else {
-        trailingArriveAt.value = null
+        trailingArriveAt.value = null;
     }
 }
 
@@ -326,94 +325,92 @@ function applyRouteResult(result: OptimizedRoute, opts: { reorder: boolean }) {
 // optimizer, directions, Google/Apple Maps export, drive timeline.
 const activeStopsInOrder = computed(() =>
     (data.value?.stops ?? []).filter((s) => !isRemovedSale(s.sale)),
-)
-const activeDraggable = computed(() =>
-    draggableStops.value.filter((s) => !isRemovedSale(s.sale)),
-)
+);
+const activeDraggable = computed(() => draggableStops.value.filter((s) => !isRemovedSale(s.sale)));
 
 // Mapbox Optimization v1 caps coords at 12. When the end is a custom
 // address we burn one coord for it, so the stop cap drops from 11 to 10.
-const optimizeStopCap = computed(() => (endMode.value === 'address' ? 10 : 11))
+const optimizeStopCap = computed(() => (endMode.value === 'address' ? 10 : 11));
 
 async function optimize() {
-    if (!data.value || activeStopsInOrder.value.length === 0) return
+    if (!data.value || activeStopsInOrder.value.length === 0) return;
     if (!startResolved.value) {
-        optimizeError.value = 'Set a starting point first.'
-        return
+        optimizeError.value = 'Set a starting point first.';
+        return;
     }
     if (endMode.value === 'address' && !endResolved.value) {
-        optimizeError.value = 'Set the end address first.'
-        return
+        optimizeError.value = 'Set the end address first.';
+        return;
     }
     if (activeStopsInOrder.value.length > optimizeStopCap.value) {
-        optimizeError.value = `Optimization supports up to ${optimizeStopCap.value} stops with this end choice.`
-        return
+        optimizeError.value = `Optimization supports up to ${optimizeStopCap.value} stops with this end choice.`;
+        return;
     }
-    optimizing.value = true
-    optimizeError.value = null
+    optimizing.value = true;
+    optimizeError.value = null;
     try {
         // For 'last_stop' optimization, the user's LAST dragged stop becomes
         // the fixed endpoint — feed Mapbox the stops in dragged order so
         // destination=last lines up with intent. Round-trip and address
         // modes don't care about input order.
         const inputStops =
-            endMode.value === 'last_stop' ? activeDraggable.value : activeStopsInOrder.value
+            endMode.value === 'last_stop' ? activeDraggable.value : activeStopsInOrder.value;
         // Track which full-stops index each active input index corresponds
         // to so we can map Mapbox's active-relative result.stopOrder back
         // to indices in `data.value.stops` (which still contains tombstones).
         const fullIdxFor = inputStops.map((s) =>
             data.value!.stops.findIndex((fs) => fs.garage_sale_id === s.garage_sale_id),
-        )
-        const stopsInput = inputStops.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }))
-        const result = await optimizeRoute(startResolved.value, stopsInput, currentRouteEnd())
-        const activeOrderFullIdx = result.stopOrder.map((i) => fullIdxFor[i]!)
-        const tombstoneFullIdx = data.value!.stops
-            .map((s, i) => (isRemovedSale(s.sale) ? i : -1))
-            .filter((i) => i >= 0)
+        );
+        const stopsInput = inputStops.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat }));
+        const result = await optimizeRoute(startResolved.value, stopsInput, currentRouteEnd());
+        const activeOrderFullIdx = result.stopOrder.map((i) => fullIdxFor[i]!);
+        const tombstoneFullIdx = data
+            .value!.stops.map((s, i) => (isRemovedSale(s.sale) ? i : -1))
+            .filter((i) => i >= 0);
         applyRouteResult(
             { ...result, stopOrder: [...activeOrderFullIdx, ...tombstoneFullIdx] },
             { reorder: true },
-        )
+        );
     } catch (e) {
-        optimizeError.value = e instanceof Error ? e.message : 'Optimization failed'
+        optimizeError.value = e instanceof Error ? e.message : 'Optimization failed';
     } finally {
-        optimizing.value = false
+        optimizing.value = false;
     }
 }
 
 async function useMyOrder() {
-    if (!data.value || activeDraggable.value.length === 0) return
+    if (!data.value || activeDraggable.value.length === 0) return;
     if (!startResolved.value) {
-        optimizeError.value = 'Set a starting point first.'
-        return
+        optimizeError.value = 'Set a starting point first.';
+        return;
     }
     if (endMode.value === 'address' && !endResolved.value) {
-        optimizeError.value = 'Set the end address first.'
-        return
+        optimizeError.value = 'Set the end address first.';
+        return;
     }
-    optimizing.value = true
-    optimizeError.value = null
+    optimizing.value = true;
+    optimizeError.value = null;
     try {
         const result = await buildRouteFromOrder(
             startResolved.value,
             // Honor the order the user dragged into.
             activeDraggable.value.map((s) => ({ lng: s.sale.lng, lat: s.sale.lat })),
             currentRouteEnd(),
-        )
-        applyRouteResult(result, { reorder: false })
+        );
+        applyRouteResult(result, { reorder: false });
     } catch (e) {
-        optimizeError.value = e instanceof Error ? e.message : 'Routing failed'
+        optimizeError.value = e instanceof Error ? e.message : 'Routing failed';
     } finally {
-        optimizing.value = false
+        optimizing.value = false;
     }
 }
 
 const stopsInVisitOrder = computed(() => {
-    if (!data.value) return []
-    const stops = data.value.stops
-    if (!optimizedOrder.value) return stops
-    return optimizedOrder.value.map((i) => stops[i]).filter(Boolean) as typeof stops
-})
+    if (!data.value) return [];
+    const stops = data.value.stops;
+    if (!optimizedOrder.value) return stops;
+    return optimizedOrder.value.map((i) => stops[i]).filter(Boolean) as typeof stops;
+});
 
 // Same as stopsInVisitOrder but with tombstones filtered out — what the
 // timeline corresponds to. Mapbox's `result.stopLegs` only has entries
@@ -421,24 +418,25 @@ const stopsInVisitOrder = computed(() => {
 // active stop in visit order, not the i-th overall stop.
 const routedStopsInOrder = computed(() =>
     stopsInVisitOrder.value.filter((s) => !isRemovedSale(s.sale)),
-)
+);
 
 // Keep the draggable mirror in sync with the canonical visit order.
 watch(
     stopsInVisitOrder,
     (next) => {
-        draggableStops.value = next.slice()
+        draggableStops.value = next.slice();
     },
     { immediate: true },
-)
+);
 
-const stopsForMap = computed(() => stopsInVisitOrder.value.map((s) => ({ sale: s.sale })))
+const stopsForMap = computed(() => stopsInVisitOrder.value.map((s) => ({ sale: s.sale })));
 
-const visitOrderForMap = computed<number[] | null>(() =>
-    // After we reorder via optimizedOrder, stopsForMap is already in visit order,
-    // so the map should show 1..N as-is — pass null for natural order.
-    null,
-)
+const visitOrderForMap = computed<number[] | null>(
+    () =>
+        // After we reorder via optimizedOrder, stopsForMap is already in visit order,
+        // so the map should show 1..N as-is — pass null for natural order.
+        null,
+);
 
 // ============================================================================
 // Export to Maps apps
@@ -449,70 +447,68 @@ const visitOrderForMap = computed<number[] | null>(() =>
 const mapsLinks = computed(() => {
     // Map exports only navigate to active stops — tombstones have no
     // valid destination since the listing was removed.
-    const stops = stopsInVisitOrder.value.filter((s) => !isRemovedSale(s.sale))
-    if (stops.length === 0) return null
+    const stops = stopsInVisitOrder.value.filter((s) => !isRemovedSale(s.sale));
+    if (stops.length === 0) return null;
 
-    const stopCoords = stops.map((s) => `${s.sale.lat},${s.sale.lng}`)
-    const endCoord = endResolved.value
-        ? `${endResolved.value.lat},${endResolved.value.lng}`
-        : null
+    const stopCoords = stops.map((s) => `${s.sale.lat},${s.sale.lng}`);
+    const endCoord = endResolved.value ? `${endResolved.value.lat},${endResolved.value.lng}` : null;
 
-    let origin: string
-    let destination: string
-    let waypoints: string[]
+    let origin: string;
+    let destination: string;
+    let waypoints: string[];
 
     if (startResolved.value) {
-        const startStr = `${startResolved.value.lat},${startResolved.value.lng}`
-        origin = startStr
+        const startStr = `${startResolved.value.lat},${startResolved.value.lng}`;
+        origin = startStr;
         if (endMode.value === 'round_trip') {
             // Round trip: end back at start, all stops as waypoints in between.
-            destination = startStr
-            waypoints = stopCoords
+            destination = startStr;
+            waypoints = stopCoords;
         } else if (endMode.value === 'address' && endCoord) {
             // End at user-supplied address: all stops are waypoints leading there.
-            destination = endCoord
-            waypoints = stopCoords
+            destination = endCoord;
+            waypoints = stopCoords;
         } else {
             // End at the last stop.
-            destination = stopCoords[stopCoords.length - 1]!
-            waypoints = stopCoords.slice(0, -1)
+            destination = stopCoords[stopCoords.length - 1]!;
+            waypoints = stopCoords.slice(0, -1);
         }
     } else {
         // No explicit start. Fall back to using the first stop as origin.
-        origin = stopCoords[0]!
+        origin = stopCoords[0]!;
         if (endMode.value === 'address' && endCoord) {
-            destination = endCoord
-            waypoints = stopCoords.slice(1)
+            destination = endCoord;
+            waypoints = stopCoords.slice(1);
         } else if (endMode.value === 'round_trip') {
-            if (stopCoords.length < 2) return null
-            destination = stopCoords[0]!
-            waypoints = stopCoords.slice(1)
+            if (stopCoords.length < 2) return null;
+            destination = stopCoords[0]!;
+            waypoints = stopCoords.slice(1);
         } else {
-            if (stopCoords.length < 2) return null
-            destination = stopCoords[stopCoords.length - 1]!
-            waypoints = stopCoords.slice(1, -1)
+            if (stopCoords.length < 2) return null;
+            destination = stopCoords[stopCoords.length - 1]!;
+            waypoints = stopCoords.slice(1, -1);
         }
     }
 
-    const truncated = waypoints.length > GOOGLE_MAX_WAYPOINTS
-    const googleWaypoints = truncated ? waypoints.slice(0, GOOGLE_MAX_WAYPOINTS) : waypoints
+    const truncated = waypoints.length > GOOGLE_MAX_WAYPOINTS;
+    const googleWaypoints = truncated ? waypoints.slice(0, GOOGLE_MAX_WAYPOINTS) : waypoints;
 
-    const google = new URL('https://www.google.com/maps/dir/')
-    google.searchParams.set('api', '1')
-    google.searchParams.set('origin', origin)
-    google.searchParams.set('destination', destination)
-    if (googleWaypoints.length) google.searchParams.set('waypoints', googleWaypoints.join('|'))
-    google.searchParams.set('travelmode', 'driving')
+    const google = new URL('https://www.google.com/maps/dir/');
+    google.searchParams.set('api', '1');
+    google.searchParams.set('origin', origin);
+    google.searchParams.set('destination', destination);
+    if (googleWaypoints.length) google.searchParams.set('waypoints', googleWaypoints.join('|'));
+    google.searchParams.set('travelmode', 'driving');
 
     // Apple Maps' URL scheme only supports a single daddr (the +to: chain
     // is a Google convention Apple has never implemented), so route to just
     // the first stop after the origin. The template warns when this means
     // dropping later stops from the Apple link.
-    const appleFirstStop = waypoints[0] ?? destination
-    const apple = new URL('https://maps.apple.com/')
-    apple.searchParams.set('saddr', origin)
-    apple.searchParams.set('daddr', appleFirstStop)
-    apple.searchParams.set('dirflg', 'd')
+    const appleFirstStop = waypoints[0] ?? destination;
+    const apple = new URL('https://maps.apple.com/');
+    apple.searchParams.set('saddr', origin);
+    apple.searchParams.set('daddr', appleFirstStop);
+    apple.searchParams.set('dirflg', 'd');
 
     return {
         google: google.toString(),
@@ -520,8 +516,8 @@ const mapsLinks = computed(() => {
         truncated,
         droppedCount: waypoints.length - googleWaypoints.length,
         appleFirstStopOnly: waypoints.length > 0,
-    }
-})
+    };
+});
 
 /**
  * Open a Maps deep-link with a per-click cache-buster appended. Without
@@ -533,8 +529,8 @@ const mapsLinks = computed(() => {
  * Unknown params are ignored by Google/Apple Maps.
  */
 function openInMaps(url: string) {
-    const sep = url.includes('?') ? '&' : '?'
-    window.open(`${url}${sep}_t=${Date.now()}`, '_blank', 'noopener,noreferrer')
+    const sep = url.includes('?') ? '&' : '?';
+    window.open(`${url}${sep}_t=${Date.now()}`, '_blank', 'noopener,noreferrer');
 }
 
 async function deleteRoute() {
@@ -543,62 +539,59 @@ async function deleteRoute() {
         description: 'This cannot be undone.',
         confirmText: 'Delete',
         tone: 'danger',
-    })
-    if (!ok) return
-    const { error } = await supabase.from('routes').delete().eq('id', id)
+    });
+    if (!ok) return;
+    const { error } = await supabase.from('routes').delete().eq('id', id);
     if (error) {
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
     }
-    toast.success('Route deleted.')
-    router.push('/itineraries')
+    toast.success('Route deleted.');
+    router.push('/itineraries');
 }
 
 // =============================================================================
 // Public sharing
 // =============================================================================
-const shareUrl = computed(() => `${config.public.siteUrl}/share/${id}`)
-const shareCopied = ref(false)
-const togglingPublic = ref(false)
+const shareUrl = computed(() => `${config.public.siteUrl}/share/${id}`);
+const shareCopied = ref(false);
+const togglingPublic = ref(false);
 
 async function togglePublic() {
-    if (!data.value || togglingPublic.value) return
-    togglingPublic.value = true
-    const next = !data.value.route.is_public
-    const { error } = await supabase
-        .from('routes')
-        .update({ is_public: next })
-        .eq('id', id)
+    if (!data.value || togglingPublic.value) return;
+    togglingPublic.value = true;
+    const next = !data.value.route.is_public;
+    const { error } = await supabase.from('routes').update({ is_public: next }).eq('id', id);
     if (error) {
-        togglingPublic.value = false
-        toast.error(error.message)
-        return
+        togglingPublic.value = false;
+        toast.error(error.message);
+        return;
     }
     // Refetch to pick up the canonical state instead of mutating
     // data.value.route.is_public directly — that mutation would race
     // with any concurrent refresh() and could be silently clobbered.
-    await refresh()
-    togglingPublic.value = false
-    if (next) toast.success('Route is now public — share the link!')
+    await refresh();
+    togglingPublic.value = false;
+    if (next) toast.success('Route is now public — share the link!');
 }
 
 async function copyShareLink() {
     try {
-        await navigator.clipboard.writeText(shareUrl.value)
-        shareCopied.value = true
-        setTimeout(() => (shareCopied.value = false), 2000)
+        await navigator.clipboard.writeText(shareUrl.value);
+        shareCopied.value = true;
+        setTimeout(() => (shareCopied.value = false), 2000);
     } catch {
-        window.prompt('Copy this link:', shareUrl.value)
+        window.prompt('Copy this link:', shareUrl.value);
     }
 }
 
 function fmtTime(d: Date): string {
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 function fmtDriveMin(seconds: number): string {
-    const m = Math.round(seconds / 60)
-    return m < 1 ? '<1 min' : `${m} min`
+    const m = Math.round(seconds / 60);
+    return m < 1 ? '<1 min' : `${m} min`;
 }
 
 /**
@@ -609,20 +602,20 @@ function fmtDriveMin(seconds: number): string {
  * shifted after the stop was added).
  */
 function stopHoursOn(sale: GarageSale): string {
-    if (!data.value) return ''
-    const row = findSaleDateOn(sale, data.value.route.route_date)
-    if (row) return formatTimeRange(row.start_time, row.end_time)
-    return formatTimeRange(sale.start_time, sale.end_time)
+    if (!data.value) return '';
+    const row = findSaleDateOn(sale, data.value.route.route_date);
+    if (row) return formatTimeRange(row.start_time, row.end_time);
+    return formatTimeRange(sale.start_time, sale.end_time);
 }
 
 const routeDateLabel = computed(() => {
-    if (!data.value) return ''
+    if (!data.value) return '';
     return new Date(data.value.route.route_date + 'T00:00:00').toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
-    })
-})
+    });
+});
 </script>
 
 <template>
@@ -684,10 +677,7 @@ const routeDateLabel = computed(() => {
                         }}
                     </button>
                 </div>
-                <div
-                    v-if="data.route.is_public"
-                    class="mt-3 flex flex-col gap-2 sm:flex-row"
-                >
+                <div v-if="data.route.is_public" class="mt-3 flex flex-col gap-2 sm:flex-row">
                     <input
                         :value="shareUrl"
                         readonly
@@ -724,18 +714,19 @@ const routeDateLabel = computed(() => {
                         v-if="activeStopsInOrder.length > optimizeStopCap"
                         class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700"
                     >
-                        ⚠ {{ activeStopsInOrder.length }} stops — Optimize Order
-                        only supports {{ optimizeStopCap }} with the current end choice.
-                        Remove {{ activeStopsInOrder.length - optimizeStopCap }} to use it.
+                        ⚠ {{ activeStopsInOrder.length }} stops — Optimize Order only supports
+                        {{ optimizeStopCap }} with the current end choice. Remove
+                        {{ activeStopsInOrder.length - optimizeStopCap }} to use it.
                     </p>
                     <p
                         v-else-if="activeStopsInOrder.length > 9"
                         class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
                     >
-                        Heads up: Google Maps export caps at 9 waypoints, so
-                        the last {{ activeStopsInOrder.length - 9 }} stop{{
+                        Heads up: Google Maps export caps at 9 waypoints, so the last
+                        {{ activeStopsInOrder.length - 9 }} stop{{
                             activeStopsInOrder.length - 9 === 1 ? '' : 's'
-                        }} will be dropped from the deep-link.
+                        }}
+                        will be dropped from the deep-link.
                     </p>
 
                     <draggable
@@ -761,11 +752,7 @@ const routeDateLabel = computed(() => {
                                     aria-label="Drag to reorder"
                                     @click.prevent
                                 >
-                                    <svg
-                                        class="h-6 w-6"
-                                        viewBox="0 0 20 20"
-                                        fill="currentColor"
-                                    >
+                                    <svg class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                         <circle cx="7" cy="5" r="1.5" />
                                         <circle cx="13" cy="5" r="1.5" />
                                         <circle cx="7" cy="10" r="1.5" />
@@ -780,8 +767,8 @@ const routeDateLabel = computed(() => {
                                         isRemovedSale(stop.sale)
                                             ? 'bg-red-400'
                                             : isExpiredSale(stop.sale)
-                                                ? 'bg-yellow-500'
-                                                : 'bg-brand-500'
+                                              ? 'bg-yellow-500'
+                                              : 'bg-brand-500'
                                     "
                                 >
                                     {{ i + 1 }}
@@ -811,10 +798,7 @@ const routeDateLabel = computed(() => {
                                     >
                                         {{ stop.sale.title }}
                                     </NuxtLink>
-                                    <span
-                                        v-else
-                                        class="font-medium text-gray-700 line-through"
-                                    >
+                                    <span v-else class="font-medium text-gray-700 line-through">
                                         {{ stop.sale.title }}
                                     </span>
                                     <div class="mt-0.5 truncate text-xs text-gray-600">
@@ -848,10 +832,7 @@ const routeDateLabel = computed(() => {
                         <h3 class="font-display text-base font-bold text-gray-900">
                             Saved sales available on {{ routeDateLabel }}
                         </h3>
-                        <p
-                            v-if="availableSaved.length"
-                            class="mt-1 text-xs text-gray-500"
-                        >
+                        <p v-if="availableSaved.length" class="mt-1 text-xs text-gray-500">
                             Tap a card to highlight it on the map.
                         </p>
                         <div v-if="availableSaved.length" class="mt-3 space-y-2">
@@ -880,8 +861,8 @@ const routeDateLabel = computed(() => {
                         <p v-else class="mt-2 text-sm text-gray-500">
                             None of your saved sales are happening that day.
                             <NuxtLink to="/browse" class="text-sky-700 hover:underline">
-                                Find more on the map
-                            </NuxtLink>.
+                                Find more on the map </NuxtLink
+                            >.
                         </p>
                     </div>
                 </div>
@@ -894,7 +875,11 @@ const routeDateLabel = computed(() => {
                             :order="visitOrderForMap"
                             :route-geometry="routeGeometry"
                             :start="startResolved"
-                            :end="endMode === 'address' && endResolved ? { lng: endResolved.lng, lat: endResolved.lat, label: 'End' } : null"
+                            :end="
+                                endMode === 'address' && endResolved
+                                    ? { lng: endResolved.lng, lat: endResolved.lat, label: 'End' }
+                                    : null
+                            "
                             :available="availableSales"
                             :selected-available-id="selectedAvailableId"
                             :hovered-available-id="hoveredAvailableId"
@@ -920,7 +905,8 @@ const routeDateLabel = computed(() => {
             >
                 <h2 class="font-display text-lg font-bold text-gray-900">Build your route</h2>
                 <p class="mt-1 text-sm text-gray-600">
-                    <em>Use my order</em> drives the stops in the order you arranged. <em>Optimize order</em>
+                    <em>Use my order</em> drives the stops in the order you arranged.
+                    <em>Optimize order</em>
                     finds the shortest path through all of them. 30 min per stop.
                 </p>
 
@@ -932,37 +918,39 @@ const routeDateLabel = computed(() => {
                   "Use my order" / "Optimize order" caps shift by 1 when ending at a
                   custom address (the end coord burns one slot in the Mapbox call).
                 -->
-                <details class="mt-3 rounded-lg bg-cream/60 px-4 py-3 text-sm ring-1 ring-orange-100">
+                <details
+                    class="mt-3 rounded-lg bg-cream/60 px-4 py-3 text-sm ring-1 ring-orange-100"
+                >
                     <summary class="cursor-pointer font-medium text-gray-800">
                         Stop limits by feature
                     </summary>
                     <ul class="mt-2 space-y-1.5 text-xs text-gray-700">
                         <li>
-                            💾 <strong>Save to your list</strong> — no limit. Add as
-                            many sales as you want to a route.
+                            💾 <strong>Save to your list</strong> — no limit. Add as many sales as
+                            you want to a route.
                         </li>
                         <li>
                             📋 <strong>Use my order</strong> — up to
-                            {{ endMode === 'address' ? 23 : 24 }} stops
-                            ({{ endMode === 'address' ? '23 with' : '24 without' }} a
-                            custom end address).
+                            {{ endMode === 'address' ? 23 : 24 }} stops ({{
+                                endMode === 'address' ? '23 with' : '24 without'
+                            }}
+                            a custom end address).
                         </li>
                         <li>
-                            🧭 <strong>Optimize order</strong> — up to
-                            {{ optimizeStopCap }} stops
-                            ({{ endMode === 'address' ? '10 with' : '11 without' }} a
-                            custom end address).
+                            🧭 <strong>Optimize order</strong> — up to {{ optimizeStopCap }} stops
+                            ({{ endMode === 'address' ? '10 with' : '11 without' }} a custom end
+                            address).
                         </li>
                         <li>
-                            🗺️ <strong>Open in Google Maps</strong> — up to 9 stops
-                            between your start and end. Extra stops get dropped from
-                            the link (we show a warning when this happens).
+                            🗺️ <strong>Open in Google Maps</strong> — up to 9 stops between your
+                            start and end. Extra stops get dropped from the link (we show a warning
+                            when this happens).
                         </li>
                         <li>
-                            🍎 <strong>Open in Apple Maps</strong> — first stop only.
-                            Apple's URL scheme doesn't support multi-stop deep links, so the button
-                            routes from your start to the first stop. Use Google Maps for the full
-                            multi-stop route.
+                            🍎 <strong>Open in Apple Maps</strong> — first stop only. Apple's URL
+                            scheme doesn't support multi-stop deep links, so the button routes from
+                            your start to the first stop. Use Google Maps for the full multi-stop
+                            route.
                         </li>
                     </ul>
                 </details>
@@ -1050,10 +1038,7 @@ const routeDateLabel = computed(() => {
                                 :disabled="geocodingStart"
                                 @click="geocodeStart"
                             >
-                                <span
-                                    v-if="geocodingStart"
-                                    class="inline-flex items-center gap-2"
-                                >
+                                <span v-if="geocodingStart" class="inline-flex items-center gap-2">
                                     <svg
                                         class="h-4 w-4 animate-spin"
                                         viewBox="0 0 24 24"
@@ -1168,8 +1153,8 @@ const routeDateLabel = computed(() => {
                             keeps it pinned as the final stop.
                         </template>
                         <template v-else>
-                            Drive to a specific address after the last sale — e.g. someone's
-                            house, the office, a different city.
+                            Drive to a specific address after the last sale — e.g. someone's house,
+                            the office, a different city.
                         </template>
                     </p>
                     <div v-if="endMode === 'address'" class="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -1186,15 +1171,8 @@ const routeDateLabel = computed(() => {
                             :disabled="geocodingEnd"
                             @click="geocodeEnd"
                         >
-                            <span
-                                v-if="geocodingEnd"
-                                class="inline-flex items-center gap-2"
-                            >
-                                <svg
-                                    class="h-4 w-4 animate-spin"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                >
+                            <span v-if="geocodingEnd" class="inline-flex items-center gap-2">
+                                <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                                     <circle
                                         cx="12"
                                         cy="12"
@@ -1252,8 +1230,10 @@ const routeDateLabel = computed(() => {
                         v-if="totalDistanceMi !== null && totalDriveMin !== null"
                         class="text-sm text-gray-700"
                     >
-                        {{ totalDistanceMi.toFixed(1) }} mi driving
-                        · ~{{ Math.round(totalDriveMin) }} min total drive time
+                        {{ totalDistanceMi.toFixed(1) }} mi driving · ~{{
+                            Math.round(totalDriveMin)
+                        }}
+                        min total drive time
                     </p>
                 </div>
 
@@ -1331,8 +1311,8 @@ const routeDateLabel = computed(() => {
                                     </span>
                                 </div>
                                 <div class="mt-0.5 text-sm text-gray-700">
-                                    Arrive {{ fmtTime(entry.arriveAt) }}
-                                    · leave {{ fmtTime(entry.departAt) }}
+                                    Arrive {{ fmtTime(entry.arriveAt) }} · leave
+                                    {{ fmtTime(entry.departAt) }}
                                 </div>
                             </div>
                         </li>
@@ -1351,15 +1331,10 @@ const routeDateLabel = computed(() => {
                                         {{ returnLegMin !== null ? 'Drive home' : 'Drive to end' }}
                                     </span>
                                     <span class="text-xs text-gray-500">
-                                        {{
-                                            Math.round((returnLegMin ?? endLegMin) as number)
-                                        }} min
+                                        {{ Math.round((returnLegMin ?? endLegMin) as number) }} min
                                     </span>
                                 </div>
-                                <div
-                                    v-if="trailingArriveAt"
-                                    class="mt-0.5 text-sm text-gray-700"
-                                >
+                                <div v-if="trailingArriveAt" class="mt-0.5 text-sm text-gray-700">
                                     Arrive {{ fmtTime(trailingArriveAt) }}
                                 </div>
                                 <div class="mt-0.5 text-xs text-gray-600">

@@ -1,4 +1,4 @@
-export type SaleOwnerStatus = 'open' | 'running_late' | 'winding_down' | 'closed'
+export type SaleOwnerStatus = 'open' | 'running_late' | 'winding_down' | 'closed';
 
 /**
  * One day on a sale's schedule. A sale always has one or more of these.
@@ -7,19 +7,19 @@ export type SaleOwnerStatus = 'open' | 'running_late' | 'winding_down' | 'closed
  * each carry their own hours — that's the whole point of `sale_dates`.
  */
 export interface SaleDate {
-    sale_date: string
-    start_time: string | null
-    end_time: string | null
+    sale_date: string;
+    start_time: string | null;
+    end_time: string | null;
 }
 
 export interface GarageSale {
-    id: string
-    user_id: string
-    title: string
-    description: string | null
-    address: string
-    lat: number
-    lng: number
+    id: string;
+    user_id: string;
+    title: string;
+    description: string | null;
+    address: string;
+    lat: number;
+    lng: number;
     /**
      * Denormalized envelope. `start_date` = min(sale_dates.sale_date),
      * `end_date` = max(sale_dates.sale_date), `start_time`/`end_time` =
@@ -32,27 +32,27 @@ export interface GarageSale {
      * `sale_dates` — the envelope can over-claim hours when the days have
      * heterogeneous windows.
      */
-    start_date: string
-    end_date: string
-    start_time: string | null
-    end_time: string | null
-    sale_dates: SaleDate[]
-    photos: string[]
-    contact_enabled: boolean
-    status: SaleOwnerStatus
+    start_date: string;
+    end_date: string;
+    start_time: string | null;
+    end_time: string | null;
+    sale_dates: SaleDate[];
+    photos: string[];
+    contact_enabled: boolean;
+    status: SaleOwnerStatus;
     /**
      * Set when the owner soft-deletes the sale. The row stays in the
      * table for ~30 days so saved-sales / route-stops referencing it
      * can render a "this sale was removed" tombstone instead of just
      * silently vanishing. Browse / my-sales filter these out.
      */
-    deleted_at: string | null
-    created_at: string
+    deleted_at: string | null;
+    created_at: string;
 }
 
 /** Convenience predicate for tombstone rendering. */
 export function isRemovedSale(sale: { deleted_at?: string | null }): boolean {
-    return !!sale.deleted_at
+    return !!sale.deleted_at;
 }
 
 /**
@@ -62,7 +62,7 @@ export function isRemovedSale(sale: { deleted_at?: string | null }): boolean {
  * the envelope.
  */
 export function findSaleDateOn(sale: GarageSale, day: string): SaleDate | null {
-    return sale.sale_dates?.find((d) => d.sale_date === day) ?? null
+    return sale.sale_dates?.find((d) => d.sale_date === day) ?? null;
 }
 
 /**
@@ -70,26 +70,23 @@ export function findSaleDateOn(sale: GarageSale, day: string): SaleDate | null {
  * GarageSale. Sorted by `sale_date` so callers can iterate without
  * re-sorting. Kept in one place so a schema change is a one-line edit.
  */
-export const GARAGE_SALE_SELECT =
-    '*, sale_dates(sale_date, start_time, end_time)'
+export const GARAGE_SALE_SELECT = '*, sale_dates(sale_date, start_time, end_time)';
 
 /** Sort sale_dates rows in place by ISO date. PostgREST doesn't promise
  *  ordering on embedded resources unless explicitly asked. */
 function sortSaleDates(sales: GarageSale[]): GarageSale[] {
     for (const s of sales) {
         if (s.sale_dates) {
-            s.sale_dates = [...s.sale_dates].sort((a, b) =>
-                a.sale_date.localeCompare(b.sale_date),
-            )
+            s.sale_dates = [...s.sale_dates].sort((a, b) => a.sale_date.localeCompare(b.sale_date));
         } else {
-            s.sale_dates = []
+            s.sale_dates = [];
         }
     }
-    return sales
+    return sales;
 }
 
 export async function fetchActiveSales() {
-    const supabase = useSupabaseClient()
+    const supabase = useSupabaseClient();
     // Generous cutoff: 1 day before "today" in whichever timezone is
     // running this fetch. SSR runs on Vercel in UTC; a user in CT at
     // 8pm local (1am UTC next day) would otherwise lose any sale ending
@@ -98,26 +95,26 @@ export async function fetchActiveSales() {
     // expiry filter in /browse trim with the user's actual local clock.
     // Cost: a handful of extra rows (yesterday's sales, capped at the
     // sales-with-end_date-yesterday set).
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const cutoff = toLocalISO(yesterday)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const cutoff = toLocalISO(yesterday);
     const { data, error } = await supabase
         .from('garage_sales')
         .select(GARAGE_SALE_SELECT)
         .is('deleted_at', null)
         .gte('end_date', cutoff)
         .neq('status', 'closed')
-        .order('start_date', { ascending: true })
-    if (error) throw error
-    return sortSaleDates((data ?? []) as unknown as GarageSale[])
+        .order('start_date', { ascending: true });
+    if (error) throw error;
+    return sortSaleDates((data ?? []) as unknown as GarageSale[]);
 }
 
 export interface OverlapConflict {
-    id: string
-    title: string
-    address: string
+    id: string;
+    title: string;
+    address: string;
     /** The specific days from the input that collide with this sale. */
-    conflictDates: string[]
+    conflictDates: string[];
 }
 
 /**
@@ -147,9 +144,9 @@ export async function findOverlappingSale(
     dates: string[],
     excludeId?: string,
 ): Promise<OverlapConflict | null> {
-    if (dates.length === 0) return null
-    const supabase = useSupabaseClient()
-    const eps = 0.0001
+    if (dates.length === 0) return null;
+    const supabase = useSupabaseClient();
+    const eps = 0.0001;
     let q = supabase
         .from('garage_sales')
         .select('id, title, address, sale_dates!inner(sale_date)')
@@ -161,24 +158,22 @@ export async function findOverlappingSale(
         .lte('lng', lng + eps)
         .neq('status', 'closed')
         .in('sale_dates.sale_date', dates)
-        .limit(1)
-    if (excludeId) q = q.neq('id', excludeId)
-    const { data, error } = await q
-    if (error) throw error
+        .limit(1);
+    if (excludeId) q = q.neq('id', excludeId);
+    const { data, error } = await q;
+    if (error) throw error;
     const row = data?.[0] as
         | { id: string; title: string; address: string; sale_dates: { sale_date: string }[] }
-        | undefined
-    if (!row) return null
-    const inputSet = new Set(dates)
-    const conflictDates = row.sale_dates
-        .map((d) => d.sale_date)
-        .filter((d) => inputSet.has(d))
+        | undefined;
+    if (!row) return null;
+    const inputSet = new Set(dates);
+    const conflictDates = row.sale_dates.map((d) => d.sale_date).filter((d) => inputSet.has(d));
     return {
         id: row.id,
         title: row.title,
         address: row.address,
         conflictDates,
-    }
+    };
 }
 
 /**
@@ -196,17 +191,17 @@ export async function findOverlappingSaleWithRetry(
     excludeId?: string,
 ): Promise<OverlapConflict | null> {
     try {
-        return await findOverlappingSale(userId, lat, lng, dates, excludeId)
+        return await findOverlappingSale(userId, lat, lng, dates, excludeId);
     } catch (firstError) {
-        await new Promise((r) => setTimeout(r, 300))
+        await new Promise((r) => setTimeout(r, 300));
         try {
-            return await findOverlappingSale(userId, lat, lng, dates, excludeId)
+            return await findOverlappingSale(userId, lat, lng, dates, excludeId);
         } catch (secondError) {
             // Re-throw the second error so the caller can show a soft
             // notice. We log both attempts to ease debugging.
-            console.warn('Overlap check failed (1st attempt):', firstError)
-            console.warn('Overlap check failed (retry):', secondError)
-            throw secondError
+            console.warn('Overlap check failed (1st attempt):', firstError);
+            console.warn('Overlap check failed (retry):', secondError);
+            throw secondError;
         }
     }
 }

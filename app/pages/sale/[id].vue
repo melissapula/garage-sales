@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { GarageSale, SaleOwnerStatus } from '~/composables/useGarageSales'
-import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
+import type { GarageSale, SaleOwnerStatus } from '~/composables/useGarageSales';
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales';
 
-const route = useRoute()
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const router = useRouter()
+const route = useRoute();
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
 
-const id = route.params.id as string
+const id = route.params.id as string;
 
 const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
     const { data, error: err } = await supabase
@@ -15,28 +15,28 @@ const { data: sale, error } = await useAsyncData(`sale-${id}`, async () => {
         .select(GARAGE_SALE_SELECT)
         .eq('id', id)
         .is('deleted_at', null)
-        .maybeSingle()
-    if (err) throw err
+        .maybeSingle();
+    if (err) throw err;
     if (!data) {
         // Real 404 — covers truly missing rows AND tombstones (owner
         // soft-deleted the listing). Saved-sales / route-stops still
         // render the tombstone with a "removed" notice from their join.
-        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' });
     }
-    return data as GarageSale
-})
+    return data as GarageSale;
+});
 
-const isOwner = computed(() => sale.value && user.value && sale.value.user_id === user.value.id)
-const status = computed(() => (sale.value ? saleStatus(sale.value) : null))
-const schedule = computed(() => (sale.value ? summarizeSchedule(sale.value) : null))
+const isOwner = computed(() => sale.value && user.value && sale.value.user_id === user.value.id);
+const status = computed(() => (sale.value ? saleStatus(sale.value) : null));
+const schedule = computed(() => (sale.value ? summarizeSchedule(sale.value) : null));
 
-const { isSaved, save, unsave, refresh: refreshSaved } = useSavedSales()
-const { deletePhotos } = useSalePhotos()
-const toast = useToast()
-const { confirm } = useConfirm()
+const { isSaved, save, unsave, refresh: refreshSaved } = useSavedSales();
+const { deletePhotos } = useSalePhotos();
+const toast = useToast();
+const { confirm } = useConfirm();
 
-const config = useRuntimeConfig()
-const shareUrl = computed(() => `${config.public.siteUrl}/sale/${id}`)
+const config = useRuntimeConfig();
+const shareUrl = computed(() => `${config.public.siteUrl}/sale/${id}`);
 
 useSeoMeta({
     title: () => (sale.value ? `${sale.value.title} — Garage Sale Tracker` : 'Garage sale'),
@@ -51,7 +51,7 @@ useSeoMeta({
     ogUrl: () => shareUrl.value,
     ogType: 'website',
     twitterCard: 'summary_large_image',
-})
+});
 
 // JSON-LD Event schema so Google can show rich event-result cards in
 // search (date, location, image inline). One Event per day in the sale's
@@ -67,19 +67,16 @@ useSeoMeta({
 // injection of well-formed JSON-LD.
 useHead({
     script: computed(() => {
-        if (!sale.value) return []
-        const s = sale.value
-        const days = s.sale_dates && s.sale_dates.length
-            ? [...s.sale_dates].sort((a, b) => a.sale_date.localeCompare(b.sale_date))
-            : [{ sale_date: s.start_date, start_time: s.start_time, end_time: s.end_time }]
+        if (!sale.value) return [];
+        const s = sale.value;
+        const days =
+            s.sale_dates && s.sale_dates.length
+                ? [...s.sale_dates].sort((a, b) => a.sale_date.localeCompare(b.sale_date))
+                : [{ sale_date: s.start_date, start_time: s.start_time, end_time: s.end_time }];
 
         const events = days.map((d) => {
-            const startsAt = d.start_time
-                ? `${d.sale_date}T${d.start_time}:00`
-                : d.sale_date
-            const endsAt = d.end_time
-                ? `${d.sale_date}T${d.end_time}:00`
-                : d.sale_date
+            const startsAt = d.start_time ? `${d.sale_date}T${d.start_time}:00` : d.sale_date;
+            const endsAt = d.end_time ? `${d.sale_date}T${d.end_time}:00` : d.sale_date;
             return {
                 '@context': 'https://schema.org',
                 '@type': 'Event',
@@ -102,9 +99,7 @@ useHead({
                         longitude: s.lng,
                     },
                 },
-                image: s.photos?.length
-                    ? s.photos
-                    : [`${config.public.siteUrl}/og-image.png`],
+                image: s.photos?.length ? s.photos : [`${config.public.siteUrl}/og-image.png`],
                 url: shareUrl.value,
                 organizer: {
                     '@type': 'Organization',
@@ -112,117 +107,117 @@ useHead({
                     url: config.public.siteUrl,
                 },
                 isAccessibleForFree: true,
-            }
-        })
+            };
+        });
 
         // Multi-day sales get a JSON array; single-day sales stay a
         // single object for crawlers that don't follow the array form.
-        const payload = events.length === 1 ? events[0] : events
-        return [{ type: 'application/ld+json', innerHTML: JSON.stringify(payload) }]
+        const payload = events.length === 1 ? events[0] : events;
+        return [{ type: 'application/ld+json', innerHTML: JSON.stringify(payload) }];
     }),
-})
+});
 
 function shareToFacebook() {
-    if (!sale.value) return
-    const u = encodeURIComponent(shareUrl.value)
+    if (!sale.value) return;
+    const u = encodeURIComponent(shareUrl.value);
     // FB ignores `quote` for most pages now, but include it as a hint.
     const quote = encodeURIComponent(
         `${sale.value.title}\n📍 ${sale.value.address}\n📅 ${schedule.value!.compact}`,
-    )
-    const url = `https://www.facebook.com/sharer/sharer.php?u=${u}&quote=${quote}`
-    window.open(url, '_blank', 'width=626,height=436,noopener,noreferrer')
+    );
+    const url = `https://www.facebook.com/sharer/sharer.php?u=${u}&quote=${quote}`;
+    window.open(url, '_blank', 'width=626,height=436,noopener,noreferrer');
 }
 
-const copied = ref(false)
+const copied = ref(false);
 async function copyLink() {
     try {
-        await navigator.clipboard.writeText(shareUrl.value)
-        copied.value = true
-        setTimeout(() => (copied.value = false), 2000)
+        await navigator.clipboard.writeText(shareUrl.value);
+        copied.value = true;
+        setTimeout(() => (copied.value = false), 2000);
     } catch {
         // fall back to a prompt
-        window.prompt('Copy this link:', shareUrl.value)
+        window.prompt('Copy this link:', shareUrl.value);
     }
 }
 
-const lightboxIndex = ref<number | null>(null)
-const reportOpen = ref(false)
+const lightboxIndex = ref<number | null>(null);
+const reportOpen = ref(false);
 function openReport() {
     if (!user.value) {
-        navigateTo(`/login?redirect=/sale/${id}`)
-        return
+        navigateTo(`/login?redirect=/sale/${id}`);
+        return;
     }
-    reportOpen.value = true
+    reportOpen.value = true;
 }
 function onReportSubmitted() {
-    toast.success("Thanks — we'll take a look.")
+    toast.success("Thanks — we'll take a look.");
 }
 
-const updatingStatus = ref(false)
-const statusError = ref<string | null>(null)
+const updatingStatus = ref(false);
+const statusError = ref<string | null>(null);
 async function setStatus(next: SaleOwnerStatus) {
-    if (!sale.value) return
-    if (sale.value.status === next) return
-    updatingStatus.value = true
-    statusError.value = null
+    if (!sale.value) return;
+    if (sale.value.status === next) return;
+    updatingStatus.value = true;
+    statusError.value = null;
     const { error: err } = await supabase
         .from('garage_sales')
         .update({ status: next })
-        .eq('id', sale.value.id)
-    updatingStatus.value = false
+        .eq('id', sale.value.id);
+    updatingStatus.value = false;
     if (err) {
-        statusError.value = err.message
-        return
+        statusError.value = err.message;
+        return;
     }
-    sale.value = { ...sale.value, status: next }
+    sale.value = { ...sale.value, status: next };
 }
 
-const messaging = ref(false)
+const messaging = ref(false);
 async function messageOwner() {
-    if (!sale.value) return
+    if (!sale.value) return;
     if (!user.value) {
-        navigateTo('/login')
-        return
+        navigateTo('/login');
+        return;
     }
-    messaging.value = true
+    messaging.value = true;
     try {
-        const threadId = await findOrCreateThread(sale.value.user_id, sale.value.id)
-        navigateTo(`/inbox/${threadId}`)
+        const threadId = await findOrCreateThread(sale.value.user_id, sale.value.id);
+        navigateTo(`/inbox/${threadId}`);
     } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not start a thread')
+        toast.error(e instanceof Error ? e.message : 'Could not start a thread');
     } finally {
-        messaging.value = false
+        messaging.value = false;
     }
 }
-onMounted(refreshSaved)
-watch(user, refreshSaved)
+onMounted(refreshSaved);
+watch(user, refreshSaved);
 
-const toggling = ref(false)
+const toggling = ref(false);
 async function toggleSaved() {
-    if (!sale.value) return
+    if (!sale.value) return;
     if (!user.value) {
-        navigateTo('/login')
-        return
+        navigateTo('/login');
+        return;
     }
-    toggling.value = true
+    toggling.value = true;
     if (isSaved(sale.value.id)) {
-        await unsave(sale.value.id)
+        await unsave(sale.value.id);
     } else {
-        await save(sale.value.id)
+        await save(sale.value.id);
     }
-    toggling.value = false
+    toggling.value = false;
 }
 
 async function deleteSale() {
-    if (!sale.value) return
+    if (!sale.value) return;
     const ok = await confirm({
         title: 'Delete this sale?',
         description: 'This cannot be undone.',
         confirmText: 'Delete',
         tone: 'danger',
-    })
-    if (!ok) return
-    const photoUrls = sale.value.photos ?? []
+    });
+    if (!ok) return;
+    const photoUrls = sale.value.photos ?? [];
     // Soft-delete via `deleted_at` so users with this sale in their
     // saved list or a planned route see a "removed" tombstone instead
     // of silent disappearance. The nightly cron physically deletes
@@ -230,16 +225,16 @@ async function deleteSale() {
     const { error: err } = await supabase
         .from('garage_sales')
         .update({ deleted_at: new Date().toISOString() })
-        .eq('id', sale.value.id)
+        .eq('id', sale.value.id);
     if (err) {
-        toast.error(err.message)
-        return
+        toast.error(err.message);
+        return;
     }
     // Best-effort cleanup of photos in storage. Photos aren't shown on
     // the tombstone, and the row gets fully purged in 30 days anyway.
-    if (photoUrls.length) deletePhotos(photoUrls).catch(() => {})
-    toast.success('Sale deleted.')
-    router.push('/browse')
+    if (photoUrls.length) deletePhotos(photoUrls).catch(() => {});
+    toast.success('Sale deleted.');
+    router.push('/browse');
 }
 </script>
 
@@ -350,9 +345,7 @@ async function deleteSale() {
                 >
                     ✓ On your list — remove?
                 </button>
-                <NuxtLink v-else to="/login" class="btn-primary">
-                    Sign in to save
-                </NuxtLink>
+                <NuxtLink v-else to="/login" class="btn-primary"> Sign in to save </NuxtLink>
 
                 <button
                     v-if="user && !isOwner && sale.contact_enabled"
@@ -388,10 +381,7 @@ async function deleteSale() {
             />
 
             <!-- Owner status pills -->
-            <div
-                v-if="isOwner"
-                class="mt-6 rounded-xl bg-white p-4 ring-1 ring-orange-100"
-            >
+            <div v-if="isOwner" class="mt-6 rounded-xl bg-white p-4 ring-1 ring-orange-100">
                 <h2 class="font-display text-base font-bold text-gray-900">Sale status</h2>
                 <p class="mt-1 text-xs text-gray-600">
                     Update what people see on the map and detail page.
@@ -425,8 +415,8 @@ async function deleteSale() {
             <div class="mt-8 border-t border-orange-100 pt-6">
                 <h2 class="font-display text-lg font-bold text-gray-900">Share this sale</h2>
                 <p class="mt-1 text-sm text-gray-600">
-                    Posting to a garage sale group? Share the link and pick the group when
-                    Facebook opens.
+                    Posting to a garage sale group? Share the link and pick the group when Facebook
+                    opens.
                 </p>
                 <div class="mt-3 flex flex-wrap gap-2">
                     <button

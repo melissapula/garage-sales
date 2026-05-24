@@ -2,7 +2,7 @@
 useSeoMeta({
     title: 'Privacy Policy — Garage Sale Tracker',
     description: 'How Garage Sale Tracker collects, uses, and protects your data.',
-})
+});
 </script>
 
 <template>
@@ -15,7 +15,9 @@ useSeoMeta({
                 Garage Sale Tracker is a small community tool for finding and posting local garage
                 sales. This policy explains, in plain English, what data the app collects, how it's
                 used, and what your rights are. If something here is unclear,
-                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline">reach out</a>.
+                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline"
+                    >reach out</a
+                >.
             </p>
 
             <h2 class="font-display text-xl font-bold text-gray-900">What we collect</h2>
@@ -67,9 +69,7 @@ useSeoMeta({
                     <strong>Supabase</strong> — hosts the database, handles auth and image storage
                     (US-based).
                 </li>
-                <li>
-                    <strong>Vercel</strong> — hosts the website and serves it to your browser.
-                </li>
+                <li><strong>Vercel</strong> — hosts the website and serves it to your browser.</li>
                 <li>
                     <strong>Cloudflare</strong> — DNS for the domain and privacy-friendly,
                     cookie-free web analytics.
@@ -85,20 +85,26 @@ useSeoMeta({
             <ul class="ml-5 list-disc space-y-1.5">
                 <li>
                     <strong>View and edit</strong> your display name on the
-                    <NuxtLink to="/account" class="text-sky-700 hover:underline">Account page</NuxtLink>.
+                    <NuxtLink to="/account" class="text-sky-700 hover:underline"
+                        >Account page</NuxtLink
+                    >.
                 </li>
                 <li>
                     <strong>Edit or delete</strong> any sale you've posted on the
-                    <NuxtLink to="/my-sales" class="text-sky-700 hover:underline">My sales page</NuxtLink>.
+                    <NuxtLink to="/my-sales" class="text-sky-700 hover:underline"
+                        >My sales page</NuxtLink
+                    >.
                 </li>
                 <li>
-                    <strong>Delete your entire account</strong> at any time from the Account page
-                    — this also wipes your sales, photos, saved list, routes, and message
-                    threads. Permanently. No questions asked.
+                    <strong>Delete your entire account</strong> at any time from the Account page —
+                    this also wipes your sales, photos, saved list, routes, and message threads.
+                    Permanently. No questions asked.
                 </li>
                 <li>
                     <strong>Ask questions</strong> about your data anytime by emailing
-                    <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline">missap1214@gmail.com</a>.
+                    <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline"
+                        >missap1214@gmail.com</a
+                    >.
                 </li>
             </ul>
 
@@ -117,7 +123,9 @@ useSeoMeta({
             <h2 class="font-display text-xl font-bold text-gray-900">Contact</h2>
             <p>
                 Questions about anything on this page? Email
-                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline">missap1214@gmail.com</a>.
+                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline"
+                    >missap1214@gmail.com</a
+                >.
             </p>
         </div>
     </section>

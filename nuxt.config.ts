@@ -3,7 +3,13 @@ export default defineNuxtConfig({
     compatibilityDate: '2025-07-15',
     devtools: { enabled: true },
 
-    modules: ['@nuxtjs/tailwindcss', '@nuxtjs/supabase', '@vueuse/nuxt', '@sentry/nuxt/module', '@vite-pwa/nuxt'],
+    modules: [
+        '@nuxtjs/tailwindcss',
+        '@nuxtjs/supabase',
+        '@vueuse/nuxt',
+        '@sentry/nuxt/module',
+        '@vite-pwa/nuxt',
+    ],
 
     // PWA — installable + offline-capable. Phase 1 of the mobile rollout
     // before any native-shell (Capacitor) work. The auto-update strategy
@@ -275,4 +281,4 @@ export default defineNuxtConfig({
             include: ['mapbox-gl'],
         },
     },
-})
+});

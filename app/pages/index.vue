@@ -1,6 +1,6 @@
 <script setup lang="ts">
-const user = useSupabaseUser()
-const config = useRuntimeConfig()
+const user = useSupabaseUser();
+const config = useRuntimeConfig();
 
 useSeoMeta({
     title: 'Garage Sale Tracker — find every yard sale near you, plan your route',
@@ -13,7 +13,7 @@ useSeoMeta({
     ogUrl: () => config.public.siteUrl as string,
     ogType: 'website',
     twitterCard: 'summary_large_image',
-})
+});
 </script>
 
 <template>
@@ -26,14 +26,12 @@ useSeoMeta({
                     map.
                 </h1>
                 <p class="mt-4 text-lg text-gray-700">
-                    Find every yard, garage, and estate sale near you. Pick the ones you want to
-                    hit and we'll plan the best route.
+                    Find every yard, garage, and estate sale near you. Pick the ones you want to hit
+                    and we'll plan the best route.
                 </p>
                 <div class="mt-8 flex flex-wrap gap-3">
                     <NuxtLink to="/browse" class="btn-primary"> Browse the map </NuxtLink>
-                    <NuxtLink v-if="user" to="/post" class="btn-secondary">
-                        Post a sale
-                    </NuxtLink>
+                    <NuxtLink v-if="user" to="/post" class="btn-secondary"> Post a sale </NuxtLink>
                     <NuxtLink v-else to="/signup" class="btn-secondary"> Sign up to post </NuxtLink>
                 </div>
             </div>

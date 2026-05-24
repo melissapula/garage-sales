@@ -1,51 +1,51 @@
 <script setup lang="ts">
-import VueHcaptcha from '@hcaptcha/vue3-hcaptcha'
+import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 
-const supabase = useSupabaseClient()
-const config = useRuntimeConfig()
+const supabase = useSupabaseClient();
+const config = useRuntimeConfig();
 
-const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
-const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
+const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || '';
+const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0);
 
-const email = ref('')
-const captchaToken = ref<string | null>(null)
-const error = ref<string | null>(null)
-const loading = ref(false)
-const sent = ref(false)
-const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
+const email = ref('');
+const captchaToken = ref<string | null>(null);
+const error = ref<string | null>(null);
+const loading = ref(false);
+const sent = ref(false);
+const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null);
 
 const canSubmit = computed(
     () => email.value.length > 0 && (!captchaEnabled.value || captchaToken.value !== null),
-)
+);
 
 function onCaptchaVerify(token: string) {
-    captchaToken.value = token
+    captchaToken.value = token;
 }
 function onCaptchaExpired() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 function onCaptchaError() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 
 async function submit() {
-    error.value = null
-    if (!canSubmit.value) return
-    loading.value = true
+    error.value = null;
+    if (!canSubmit.value) return;
+    loading.value = true;
     const { error: err } = await supabase.auth.resetPasswordForEmail(email.value, {
         redirectTo: `${config.public.siteUrl}/reset-password`,
         ...(captchaToken.value ? { captchaToken: captchaToken.value } : {}),
-    })
-    loading.value = false
+    });
+    loading.value = false;
     if (captchaEnabled.value) {
-        captchaToken.value = null
-        hcaptchaRef.value?.reset()
+        captchaToken.value = null;
+        hcaptchaRef.value?.reset();
     }
     if (err) {
-        error.value = err.message
-        return
+        error.value = err.message;
+        return;
     }
-    sent.value = true
+    sent.value = true;
 }
 </script>
 
@@ -85,11 +85,7 @@ async function submit() {
                 {{ error }}
             </p>
 
-            <button
-                type="submit"
-                class="btn-primary w-full"
-                :disabled="loading || !canSubmit"
-            >
+            <button type="submit" class="btn-primary w-full" :disabled="loading || !canSubmit">
                 {{ loading ? 'Sending…' : 'Send reset link' }}
             </button>
         </form>

@@ -1,4 +1,4 @@
-import type { Config } from 'tailwindcss'
+import type { Config } from 'tailwindcss';
 
 export default <Partial<Config>>{
     content: [
@@ -48,4 +48,4 @@ export default <Partial<Config>>{
             },
         },
     },
-}
+};

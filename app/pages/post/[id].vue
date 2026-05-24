@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
-import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
-import { emptyDay, scheduleDates, scheduleEnvelope, validateSchedule, type ScheduleDay } from '~/utils/schedule'
+import type { GarageSale } from '~/composables/useGarageSales';
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales';
+import {
+    emptyDay,
+    scheduleDates,
+    scheduleEnvelope,
+    validateSchedule,
+    type ScheduleDay,
+} from '~/utils/schedule';
 
-const route = useRoute()
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const router = useRouter()
-const toast = useToast()
+const route = useRoute();
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
+const toast = useToast();
 
-const id = route.params.id as string
+const id = route.params.id as string;
 
 const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, async () => {
     const { data, error } = await supabase
@@ -17,10 +23,10 @@ const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, as
         .select(GARAGE_SALE_SELECT)
         .eq('id', id)
         .is('deleted_at', null)
-        .maybeSingle()
-    if (error) throw error
+        .maybeSingle();
+    if (error) throw error;
     if (!data) {
-        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' });
     }
     // Ownership check inside the loader so we don't leak the existence
     // of a foreign sale via a 403 vs 404 distinction (RLS would block
@@ -28,14 +34,14 @@ const { data: existing, error: loadError } = await useAsyncData(`edit-${id}`, as
     // including photos, so the cleanest fix is to mask ownership
     // mismatches as not-found upstream of the form mount).
     if (user.value && data.user_id !== user.value.id) {
-        throw createError({ statusCode: 404, statusMessage: 'Sale not found' })
+        throw createError({ statusCode: 404, statusMessage: 'Sale not found' });
     }
-    return data as unknown as GarageSale
-})
+    return data as unknown as GarageSale;
+});
 
-const title = ref(existing.value?.title ?? '')
-const description = ref(existing.value?.description ?? '')
-const addressInput = ref(existing.value?.address ?? '')
+const title = ref(existing.value?.title ?? '');
+const description = ref(existing.value?.description ?? '');
+const addressInput = ref(existing.value?.address ?? '');
 const resolved = ref<{ address: string; lat: number; lng: number } | null>(
     existing.value
         ? {
@@ -44,7 +50,7 @@ const resolved = ref<{ address: string; lat: number; lng: number } | null>(
               lng: existing.value.lng,
           }
         : null,
-)
+);
 const days = ref<ScheduleDay[]>(
     existing.value && existing.value.sale_dates && existing.value.sale_dates.length
         ? existing.value.sale_dates.map((d) => ({
@@ -53,99 +59,102 @@ const days = ref<ScheduleDay[]>(
               end_time: d.end_time ?? '',
           }))
         : [emptyDay()],
-)
-const photos = ref<string[]>(existing.value?.photos ?? [])
-const contactEnabled = ref<boolean>(existing.value?.contact_enabled ?? true)
+);
+const photos = ref<string[]>(existing.value?.photos ?? []);
+const contactEnabled = ref<boolean>(existing.value?.contact_enabled ?? true);
 
-const error = ref<string | null>(null)
-const geocoding = ref(false)
-const saving = ref(false)
+const error = ref<string | null>(null);
+const geocoding = ref(false);
+const saving = ref(false);
 
 // PhotoUploader stages storage deletes for already-saved photos and
 // only commits them after we successfully persist the form. That way a
 // user who removes a photo and then closes the page without saving
 // still has the photo when they come back.
-const photoUploaderRef = ref<{ commitPendingDeletes: () => Promise<void> } | null>(null)
+const photoUploaderRef = ref<{ commitPendingDeletes: () => Promise<void> } | null>(null);
 
 watch(addressInput, () => {
     if (resolved.value && resolved.value.address !== addressInput.value) {
-        resolved.value = null
+        resolved.value = null;
     }
-})
+});
 
 const validationError = computed<string | null>(() => {
-    if (!title.value.trim()) return 'Add a title.'
-    if (!resolved.value) return 'Find the address on the map first.'
+    if (!title.value.trim()) return 'Add a title.';
+    if (!resolved.value) return 'Find the address on the map first.';
     // Edit allows already-past days (e.g. for a sale that's started),
     // but requires at least one day still in the future — same intent
     // as the legacy "end_date can't be in the past" rule.
-    return validateSchedule(days.value, { allowPastDates: true, requireFutureEnd: true })
-})
+    return validateSchedule(days.value, { allowPastDates: true, requireFutureEnd: true });
+});
 
-const isValid = computed(() => validationError.value === null)
+const isValid = computed(() => validationError.value === null);
 
 function addDay() {
-    const dates = days.value.map((d) => d.date).filter(Boolean).sort()
-    let next = ''
+    const dates = days.value
+        .map((d) => d.date)
+        .filter(Boolean)
+        .sort();
+    let next = '';
     if (dates.length) {
-        const last = new Date(dates[dates.length - 1] + 'T00:00:00')
-        last.setDate(last.getDate() + 1)
-        next = toLocalISO(last)
+        const last = new Date(dates[dates.length - 1] + 'T00:00:00');
+        last.setDate(last.getDate() + 1);
+        next = toLocalISO(last);
     }
-    const prev = days.value[days.value.length - 1]
+    const prev = days.value[days.value.length - 1];
     days.value.push({
         date: next,
         start_time: prev?.start_time ?? '',
         end_time: prev?.end_time ?? '',
-    })
+    });
 }
 
 function removeDay(i: number) {
     if (days.value.length === 1) {
-        days.value[0] = emptyDay()
-        return
+        days.value[0] = emptyDay();
+        return;
     }
-    days.value.splice(i, 1)
+    days.value.splice(i, 1);
 }
 
 async function findAddress() {
-    error.value = null
+    error.value = null;
     if (!addressInput.value.trim()) {
-        error.value = 'Enter an address first.'
-        return
+        error.value = 'Enter an address first.';
+        return;
     }
-    geocoding.value = true
+    geocoding.value = true;
     try {
-        const result = await geocodeAddress(addressInput.value.trim())
+        const result = await geocodeAddress(addressInput.value.trim());
         if (!result) {
-            error.value = "Couldn't find that address."
-            resolved.value = null
-            return
+            error.value = "Couldn't find that address.";
+            resolved.value = null;
+            return;
         }
-        resolved.value = result
-        addressInput.value = result.address
+        resolved.value = result;
+        addressInput.value = result.address;
     } catch (e: unknown) {
-        error.value = e instanceof Error ? e.message : 'Geocoding failed'
+        error.value = e instanceof Error ? e.message : 'Geocoding failed';
     } finally {
-        geocoding.value = false
+        geocoding.value = false;
     }
 }
 
 async function submit() {
-    error.value = null
+    error.value = null;
     if (!isValid.value) {
-        error.value = validationError.value
-        return
+        error.value = validationError.value;
+        return;
     }
-    saving.value = true
+    saving.value = true;
 
-    const dates = scheduleDates(days.value)
-    const envelope = scheduleEnvelope(days.value)
+    const dates = scheduleDates(days.value);
+    const envelope = scheduleEnvelope(days.value);
 
     // Reject if another active sale at the same address shares any day
     // with this one (excluding this sale itself). The retry helper tries
     // twice; if both attempts fail we still save, but flag the user.
-    let dupCheckFailed = false
+    let dupCheckFailed = false;
     try {
         const conflict = await findOverlappingSaleWithRetry(
             user.value!.id,
@@ -153,17 +162,17 @@ async function submit() {
             resolved.value!.lng,
             dates,
             id,
-        )
+        );
         if (conflict) {
-            saving.value = false
-            const dayList = conflict.conflictDates.join(', ')
+            saving.value = false;
+            const dayList = conflict.conflictDates.join(', ');
             error.value =
                 `You've already got another sale at this address on ${dayList}: ` +
-                `"${conflict.title}". Adjust your days, or edit that listing instead.`
-            return
+                `"${conflict.title}". Adjust your days, or edit that listing instead.`;
+            return;
         }
     } catch {
-        dupCheckFailed = true
+        dupCheckFailed = true;
     }
 
     const { error: err } = await supabase
@@ -185,59 +194,55 @@ async function submit() {
             photos: photos.value,
             contact_enabled: contactEnabled.value,
         })
-        .eq('id', id)
+        .eq('id', id);
     if (err) {
-        saving.value = false
-        error.value = err.message
-        return
+        saving.value = false;
+        error.value = err.message;
+        return;
     }
 
     // Sync the per-day rows: delete any days the user removed, then
     // upsert the current set (handles both unchanged days, time edits,
     // and brand-new days).
-    const oldDates = new Set(
-        (existing.value?.sale_dates ?? []).map((d) => d.sale_date),
-    )
-    const newDates = new Set(dates)
-    const toRemove = [...oldDates].filter((d) => !newDates.has(d))
+    const oldDates = new Set((existing.value?.sale_dates ?? []).map((d) => d.sale_date));
+    const newDates = new Set(dates);
+    const toRemove = [...oldDates].filter((d) => !newDates.has(d));
     if (toRemove.length) {
         const { error: delErr } = await supabase
             .from('sale_dates')
             .delete()
             .eq('sale_id', id)
-            .in('sale_date', toRemove)
+            .in('sale_date', toRemove);
         if (delErr) {
-            saving.value = false
-            error.value = `Couldn't remove old days: ${delErr.message}`
-            return
+            saving.value = false;
+            error.value = `Couldn't remove old days: ${delErr.message}`;
+            return;
         }
     }
-    const { error: upErr } = await supabase
-        .from('sale_dates')
-        .upsert(
-            days.value.map((d) => ({
-                sale_id: id,
-                sale_date: d.date,
-                start_time: d.start_time,
-                end_time: d.end_time,
-            })),
-            { onConflict: 'sale_id,sale_date' },
-        )
-    saving.value = false
+    const { error: upErr } = await supabase.from('sale_dates').upsert(
+        days.value.map((d) => ({
+            sale_id: id,
+            sale_date: d.date,
+            start_time: d.start_time,
+            end_time: d.end_time,
+        })),
+        { onConflict: 'sale_id,sale_date' },
+    );
+    saving.value = false;
     if (upErr) {
-        error.value = `Couldn't save the schedule: ${upErr.message}`
-        return
+        error.value = `Couldn't save the schedule: ${upErr.message}`;
+        return;
     }
 
     // Now that the new photos[] is persisted, commit any storage deletes
     // the user staged via the photo uploader's "X" button.
-    await photoUploaderRef.value?.commitPendingDeletes()
+    await photoUploaderRef.value?.commitPendingDeletes();
     if (dupCheckFailed) {
         toast.info(
             "We couldn't verify you don't already have another sale at this address. Your edits are saved — please double-check 'My sales' for a duplicate.",
-        )
+        );
     }
-    router.push(`/sale/${id}`)
+    router.push(`/sale/${id}`);
 }
 </script>
 
@@ -318,7 +323,9 @@ async function submit() {
                         class="rounded-lg bg-white p-3 ring-1 ring-orange-100"
                     >
                         <div class="mb-2 flex items-center justify-between">
-                            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            <span
+                                class="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                            >
                                 Day {{ i + 1 }}
                             </span>
                             <button
@@ -378,7 +385,9 @@ async function submit() {
                 <PhotoUploader ref="photoUploaderRef" v-model="photos" class="mt-1" />
             </div>
 
-            <label class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100">
+            <label
+                class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100"
+            >
                 <input
                     v-model="contactEnabled"
                     type="checkbox"

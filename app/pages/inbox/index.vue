@@ -1,21 +1,21 @@
 <script setup lang="ts">
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
 
-const { data: threads, refresh, pending } = await useAsyncData(
-    'inbox-threads',
-    () => fetchInbox(),
-    { watch: [user] },
-)
+const {
+    data: threads,
+    refresh,
+    pending,
+} = await useAsyncData('inbox-threads', () => fetchInbox(), { watch: [user] });
 
-const unread = useUnreadCount()
+const unread = useUnreadCount();
 
-let channel: RealtimeChannel | null = null
+let channel: RealtimeChannel | null = null;
 
 onMounted(() => {
-    unread.refresh()
+    unread.refresh();
     channel = supabase
         .channel('inbox-list')
         .on(
@@ -29,12 +29,12 @@ onMounted(() => {
                 // refresh() for a brand-new thread that wasn't in our
                 // list before.
                 const m = payload.new as {
-                    id?: string
-                    thread_id?: string
-                    sender_id?: string
-                    body?: string
-                    created_at?: string
-                }
+                    id?: string;
+                    thread_id?: string;
+                    sender_id?: string;
+                    body?: string;
+                    created_at?: string;
+                };
                 if (
                     typeof m?.id !== 'string' ||
                     typeof m.thread_id !== 'string' ||
@@ -42,31 +42,28 @@ onMounted(() => {
                     typeof m.body !== 'string' ||
                     typeof m.created_at !== 'string'
                 ) {
-                    refresh()
-                    return
+                    refresh();
+                    return;
                 }
-                const list = threads.value
+                const list = threads.value;
                 if (!list) {
-                    refresh()
-                    return
+                    refresh();
+                    return;
                 }
-                const existing = list.find((t) => t.id === m.thread_id)
+                const existing = list.find((t) => t.id === m.thread_id);
                 if (!existing) {
                     // New thread for this user — fetch to pull in the
                     // other-participant profile + sale relation.
-                    refresh()
-                    return
+                    refresh();
+                    return;
                 }
-                existing.last_message_preview = m.body.slice(0, 100)
-                existing.last_message_at = m.created_at
+                existing.last_message_preview = m.body.slice(0, 100);
+                existing.last_message_at = m.created_at;
                 if (m.sender_id !== user.value?.id) {
-                    existing.unreadCount = (existing.unreadCount ?? 0) + 1
+                    existing.unreadCount = (existing.unreadCount ?? 0) + 1;
                 }
                 // Re-sort so the freshly-active thread floats to the top.
-                threads.value = [
-                    existing,
-                    ...list.filter((t) => t.id !== m.thread_id),
-                ]
+                threads.value = [existing, ...list.filter((t) => t.id !== m.thread_id)];
             },
         )
         .on(
@@ -75,51 +72,45 @@ onMounted(() => {
             () => {
                 // Catches edge cases the messages-INSERT path doesn't
                 // (hide/unhide flips, etc.). Rare; full refresh is fine.
-                refresh()
+                refresh();
             },
         )
-        .subscribe()
-})
+        .subscribe();
+});
 
 onBeforeUnmount(() => {
-    if (channel) supabase.removeChannel(channel)
-    channel = null
-})
+    if (channel) supabase.removeChannel(channel);
+    channel = null;
+});
 
 async function refreshAll() {
-    await Promise.all([refresh(), unread.refresh()])
+    await Promise.all([refresh(), unread.refresh()]);
 }
 
 function fmtRelative(iso: string): string {
-    const d = new Date(iso)
-    const diffMs = Date.now() - d.getTime()
-    const min = Math.floor(diffMs / 60000)
-    if (min < 1) return 'just now'
-    if (min < 60) return `${min}m ago`
-    const hr = Math.floor(min / 60)
-    if (hr < 24) return `${hr}h ago`
-    const day = Math.floor(hr / 24)
-    if (day < 7) return `${day}d ago`
-    return d.toLocaleDateString()
+    const d = new Date(iso);
+    const diffMs = Date.now() - d.getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return 'just now';
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    return d.toLocaleDateString();
 }
 </script>
 
 <template>
     <section class="mx-auto max-w-3xl px-4 py-8">
         <h1 class="font-display text-3xl font-bold text-gray-900">Inbox</h1>
-        <p class="mt-2 text-sm text-gray-600">
-            Conversations with other users about garage sales.
-        </p>
+        <p class="mt-2 text-sm text-gray-600">Conversations with other users about garage sales.</p>
 
         <!-- Skeleton during a refetch (e.g. user state change). The first
              paint is server-rendered with data already loaded, so this
              only shows when there's no cached threads list yet. -->
         <div v-if="pending && !threads?.length" class="mt-6 space-y-2">
-            <div
-                v-for="i in 3"
-                :key="i"
-                class="rounded-xl bg-white p-4 ring-1 ring-orange-100"
-            >
+            <div v-for="i in 3" :key="i" class="rounded-xl bg-white p-4 ring-1 ring-orange-100">
                 <div class="h-4 w-1/3 animate-pulse rounded bg-gray-200" />
                 <div class="mt-2 h-3 w-1/2 animate-pulse rounded bg-gray-200" />
                 <div class="mt-2 h-3 w-2/3 animate-pulse rounded bg-gray-200" />
@@ -151,7 +142,11 @@ function fmtRelative(iso: string): string {
                             </p>
                             <p
                                 class="mt-1 truncate text-sm"
-                                :class="t.unreadCount > 0 ? 'font-medium text-gray-900' : 'text-gray-600'"
+                                :class="
+                                    t.unreadCount > 0
+                                        ? 'font-medium text-gray-900'
+                                        : 'text-gray-600'
+                                "
                             >
                                 {{ t.last_message_preview || 'No messages yet' }}
                             </p>

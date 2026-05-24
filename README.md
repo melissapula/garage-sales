@@ -70,7 +70,7 @@ Nuxt's Nitro engine auto-detects Vercel — no `vercel.json` needed.
     - **Site URL:** your Vercel domain
     - **Redirect URLs (allow list):** add the Vercel domain plus `https://your-domain/confirm`, `https://your-domain/reset-password`. (Keep `http://localhost:3000` entries for local dev.)
 6. **Mapbox token URL restrictions** (recommended). In your Mapbox account → tokens → restrict the public token's URL allowlist to your Vercel domain plus `localhost`.
-7. **Verify Open Graph previews** by pasting a sale URL into Facebook's [Sharing Debugger](https://developers.facebook.com/tools/debug/) and clicking *Scrape Again*. The preview should pull the sale's title, address, dates, and first photo.
+7. **Verify Open Graph previews** by pasting a sale URL into Facebook's [Sharing Debugger](https://developers.facebook.com/tools/debug/) and clicking _Scrape Again_. The preview should pull the sale's title, address, dates, and first photo.
 
 ## Features
 

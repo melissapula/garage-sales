@@ -1,66 +1,64 @@
 <script setup lang="ts">
-const supabase = useSupabaseClient()
-const router = useRouter()
+const supabase = useSupabaseClient();
+const router = useRouter();
 
-const password = ref('')
-const passwordConfirm = ref('')
-const error = ref<string | null>(null)
-const loading = ref(false)
+const password = ref('');
+const passwordConfirm = ref('');
+const error = ref<string | null>(null);
+const loading = ref(false);
 
 // Did the recovery email link exchange a session for us? If the user
 // lands here without one (link expired, opened in a different browser,
 // etc.) updateUser would fail with a generic error, so we check up front
 // and show a friendlier "request a new link" message.
-const sessionState = ref<'checking' | 'ready' | 'missing'>('checking')
+const sessionState = ref<'checking' | 'ready' | 'missing'>('checking');
 
 onMounted(async () => {
-    const { data } = await supabase.auth.getSession()
-    sessionState.value = data.session ? 'ready' : 'missing'
-})
+    const { data } = await supabase.auth.getSession();
+    sessionState.value = data.session ? 'ready' : 'missing';
+});
 
-const passwordTooShort = computed(
-    () => password.value.length > 0 && password.value.length < 8,
-)
+const passwordTooShort = computed(() => password.value.length > 0 && password.value.length < 8);
 // Only show the mismatch message after the user has tabbed/clicked away
 // from the confirm field. Re-rendering "passwords don't match" on every
 // keystroke is jarring (the user is mid-typing, of course it doesn't
 // match yet) and was the slowest INP measurement in our analytics —
 // each keystroke forced a re-render of the conditional <p>. Blur-gating
 // makes the message accurate and cuts the per-keystroke render cost.
-const passwordConfirmTouched = ref(false)
+const passwordConfirmTouched = ref(false);
 function onConfirmBlur() {
-    passwordConfirmTouched.value = true
+    passwordConfirmTouched.value = true;
 }
 function onConfirmFocus() {
     // Hide the message again once the user comes back to fix it; we
     // don't want stale "doesn't match" sitting under an actively edited
     // field. Re-shows on next blur.
-    passwordConfirmTouched.value = false
+    passwordConfirmTouched.value = false;
 }
 const passwordsMismatch = computed(
     () =>
         passwordConfirmTouched.value &&
         passwordConfirm.value.length > 0 &&
         password.value !== passwordConfirm.value,
-)
+);
 const canSubmit = computed(
     () =>
         sessionState.value === 'ready' &&
         password.value.length >= 8 &&
         password.value === passwordConfirm.value,
-)
+);
 
 async function submit() {
-    error.value = null
-    if (!canSubmit.value) return
-    loading.value = true
-    const { error: err } = await supabase.auth.updateUser({ password: password.value })
-    loading.value = false
+    error.value = null;
+    if (!canSubmit.value) return;
+    loading.value = true;
+    const { error: err } = await supabase.auth.updateUser({ password: password.value });
+    loading.value = false;
     if (err) {
-        error.value = err.message
-        return
+        error.value = err.message;
+        return;
     }
-    router.push('/browse')
+    router.push('/browse');
 }
 </script>
 
@@ -102,10 +100,7 @@ async function submit() {
                     required
                     class="input mt-1"
                 />
-                <p
-                    v-if="passwordTooShort"
-                    class="mt-1 text-xs text-amber-700"
-                >
+                <p v-if="passwordTooShort" class="mt-1 text-xs text-amber-700">
                     Use at least 8 characters.
                 </p>
             </div>
@@ -124,10 +119,7 @@ async function submit() {
                     @blur="onConfirmBlur"
                     @focus="onConfirmFocus"
                 />
-                <p
-                    v-if="passwordsMismatch"
-                    class="mt-1 text-xs text-red-700"
-                >
+                <p v-if="passwordsMismatch" class="mt-1 text-xs text-red-700">
                     Passwords don't match.
                 </p>
             </div>
@@ -136,11 +128,7 @@ async function submit() {
                 {{ error }}
             </p>
 
-            <button
-                type="submit"
-                class="btn-primary w-full"
-                :disabled="loading || !canSubmit"
-            >
+            <button type="submit" class="btn-primary w-full" :disabled="loading || !canSubmit">
                 {{ loading ? 'Updating…' : 'Update password' }}
             </button>
         </form>

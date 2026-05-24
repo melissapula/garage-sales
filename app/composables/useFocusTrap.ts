@@ -24,82 +24,77 @@ const FOCUSABLE_SELECTOR = [
     'textarea:not([disabled])',
     '[tabindex]:not([tabindex="-1"])',
     '[contenteditable="true"]',
-].join(',')
+].join(',');
 
 function focusableWithin(root: HTMLElement): HTMLElement[] {
     return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
         (el) => !el.hasAttribute('aria-hidden') && el.offsetParent !== null,
-    )
+    );
 }
 
-export function useFocusTrap(
-    containerRef: Ref<HTMLElement | null>,
-    active: Ref<boolean>,
-) {
-    let previouslyFocused: HTMLElement | null = null
+export function useFocusTrap(containerRef: Ref<HTMLElement | null>, active: Ref<boolean>) {
+    let previouslyFocused: HTMLElement | null = null;
 
     function onKeydown(ev: KeyboardEvent) {
-        if (ev.key !== 'Tab' || !containerRef.value) return
-        const focusable = focusableWithin(containerRef.value)
+        if (ev.key !== 'Tab' || !containerRef.value) return;
+        const focusable = focusableWithin(containerRef.value);
         if (focusable.length === 0) {
-            ev.preventDefault()
-            containerRef.value.focus()
-            return
+            ev.preventDefault();
+            containerRef.value.focus();
+            return;
         }
-        const first = focusable[0]!
-        const last = focusable[focusable.length - 1]!
-        const current = document.activeElement as HTMLElement | null
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+        const current = document.activeElement as HTMLElement | null;
 
         if (ev.shiftKey) {
             if (current === first || !containerRef.value.contains(current)) {
-                ev.preventDefault()
-                last.focus()
+                ev.preventDefault();
+                last.focus();
             }
         } else {
             if (current === last || !containerRef.value.contains(current)) {
-                ev.preventDefault()
-                first.focus()
+                ev.preventDefault();
+                first.focus();
             }
         }
     }
 
     watch(active, (next) => {
-        if (typeof document === 'undefined') return
+        if (typeof document === 'undefined') return;
         if (next) {
-            previouslyFocused = (document.activeElement as HTMLElement | null) ?? null
+            previouslyFocused = (document.activeElement as HTMLElement | null) ?? null;
             // Wait a tick so v-if / Teleport mounts the container before
             // we read its focusable children.
             nextTick(() => {
-                if (!containerRef.value) return
+                if (!containerRef.value) return;
                 // Honor an explicit `data-autofocus` first — a modal
                 // can mark its first *meaningful* control (e.g. a
                 // reason <select>) so the user lands on the input
                 // they'll act on, not the close-X. Falls back to the
                 // first focusable, then the container itself.
-                const auto = containerRef.value.querySelector<HTMLElement>(
-                    '[data-autofocus]',
-                )
+                const auto = containerRef.value.querySelector<HTMLElement>('[data-autofocus]');
                 if (auto && auto.offsetParent !== null && !auto.hasAttribute('aria-hidden')) {
-                    auto.focus()
-                    return
+                    auto.focus();
+                    return;
                 }
-                const focusable = focusableWithin(containerRef.value)
-                if (focusable.length > 0) focusable[0]!.focus()
-                else containerRef.value.focus()
-            })
-            document.addEventListener('keydown', onKeydown, true)
+                const focusable = focusableWithin(containerRef.value);
+                if (focusable.length > 0) focusable[0]!.focus();
+                else containerRef.value.focus();
+            });
+            document.addEventListener('keydown', onKeydown, true);
         } else {
-            document.removeEventListener('keydown', onKeydown, true)
+            document.removeEventListener('keydown', onKeydown, true);
             if (previouslyFocused && document.body.contains(previouslyFocused)) {
-                previouslyFocused.focus()
+                previouslyFocused.focus();
             }
-            previouslyFocused = null
+            previouslyFocused = null;
         }
-    })
+    });
 
     onBeforeUnmount(() => {
         if (typeof document !== 'undefined') {
-            document.removeEventListener('keydown', onKeydown, true)
+            document.removeEventListener('keydown', onKeydown, true);
         }
-    })
+    });
 }

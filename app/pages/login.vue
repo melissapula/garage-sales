@@ -1,71 +1,71 @@
 <script setup lang="ts">
-import VueHcaptcha from '@hcaptcha/vue3-hcaptcha'
+import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 
-const supabase = useSupabaseClient()
-const config = useRuntimeConfig()
-const router = useRouter()
-const route = useRoute()
+const supabase = useSupabaseClient();
+const config = useRuntimeConfig();
+const router = useRouter();
+const route = useRoute();
 
-const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
-const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
+const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || '';
+const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0);
 
-const email = ref('')
-const password = ref('')
-const showPassword = ref(false)
-const captchaToken = ref<string | null>(null)
-const error = ref<string | null>(null)
-const loading = ref(false)
-const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
+const email = ref('');
+const password = ref('');
+const showPassword = ref(false);
+const captchaToken = ref<string | null>(null);
+const error = ref<string | null>(null);
+const loading = ref(false);
+const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null);
 
-const justConfirmed = computed(() => route.query.confirmed === '1')
-const signedOutForIdle = computed(() => route.query.idle === '1')
-const passwordType = computed(() => (showPassword.value ? 'text' : 'password'))
+const justConfirmed = computed(() => route.query.confirmed === '1');
+const signedOutForIdle = computed(() => route.query.idle === '1');
+const passwordType = computed(() => (showPassword.value ? 'text' : 'password'));
 const canSubmit = computed(
     () =>
         email.value.length > 0 &&
         password.value.length > 0 &&
         (!captchaEnabled.value || captchaToken.value !== null),
-)
+);
 
 function onCaptchaVerify(token: string) {
-    captchaToken.value = token
+    captchaToken.value = token;
 }
 function onCaptchaExpired() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 function onCaptchaError() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 
 async function submit() {
-    error.value = null
-    if (!canSubmit.value) return
-    loading.value = true
+    error.value = null;
+    if (!canSubmit.value) return;
+    loading.value = true;
     const { error: err } = await supabase.auth.signInWithPassword({
         email: email.value,
         password: password.value,
         options: captchaToken.value ? { captchaToken: captchaToken.value } : undefined,
-    })
-    loading.value = false
+    });
+    loading.value = false;
     if (captchaEnabled.value) {
-        captchaToken.value = null
-        hcaptchaRef.value?.reset()
+        captchaToken.value = null;
+        hcaptchaRef.value?.reset();
     }
     if (err) {
-        error.value = err.message
-        return
+        error.value = err.message;
+        return;
     }
-    router.push(safeRedirect(route.query.redirect))
+    router.push(safeRedirect(route.query.redirect));
 }
 
 // Only follow `?redirect=` if it points back into our own app. Anything
 // starting with `//` or `/\` is a protocol-relative URL and would bounce
 // the freshly-authed user off-site.
 function safeRedirect(raw: unknown): string {
-    if (typeof raw !== 'string') return '/browse'
-    if (!raw.startsWith('/')) return '/browse'
-    if (raw.startsWith('//') || raw.startsWith('/\\')) return '/browse'
-    return raw
+    if (typeof raw !== 'string') return '/browse';
+    if (!raw.startsWith('/')) return '/browse';
+    if (raw.startsWith('//') || raw.startsWith('/\\')) return '/browse';
+    return raw;
 }
 </script>
 
@@ -74,18 +74,12 @@ function safeRedirect(raw: unknown): string {
         <h1 class="font-display text-3xl font-bold text-gray-900">Sign in</h1>
         <p class="mt-2 text-gray-600">Welcome back to Garage Sale Tracker.</p>
 
-        <div
-            v-if="justConfirmed"
-            class="mt-6 rounded-lg bg-green-50 p-4 text-sm text-green-800"
-        >
+        <div v-if="justConfirmed" class="mt-6 rounded-lg bg-green-50 p-4 text-sm text-green-800">
             <p class="font-medium">Email confirmed!</p>
             <p class="mt-1">Sign in below to continue.</p>
         </div>
 
-        <div
-            v-if="signedOutForIdle"
-            class="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800"
-        >
+        <div v-if="signedOutForIdle" class="mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
             <p class="font-medium">You've been signed out for inactivity.</p>
             <p class="mt-1">Sign in again to pick up where you left off.</p>
         </div>
@@ -182,11 +176,7 @@ function safeRedirect(raw: unknown): string {
                 {{ error }}
             </p>
 
-            <button
-                type="submit"
-                class="btn-primary w-full"
-                :disabled="loading || !canSubmit"
-            >
+            <button type="submit" class="btn-primary w-full" :disabled="loading || !canSubmit">
                 {{ loading ? 'Signing in…' : 'Sign in' }}
             </button>
         </form>

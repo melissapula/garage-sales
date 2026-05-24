@@ -2,7 +2,7 @@
 useSeoMeta({
     title: 'Terms of Service — Garage Sale Tracker',
     description: 'Terms of using Garage Sale Tracker.',
-})
+});
 </script>
 
 <template>
@@ -52,12 +52,12 @@ useSeoMeta({
                     time, that's on you to fix or remove.
                 </li>
                 <li>
-                    Don't post anything illegal, harassing, sexually explicit, hateful, or
-                    obviously spammy. Don't post anyone else's sale without their okay.
+                    Don't post anything illegal, harassing, sexually explicit, hateful, or obviously
+                    spammy. Don't post anyone else's sale without their okay.
                 </li>
                 <li>
-                    We reserve the right to remove content that breaks these rules and, in
-                    extreme cases, suspend accounts.
+                    We reserve the right to remove content that breaks these rules and, in extreme
+                    cases, suspend accounts.
                 </li>
             </ul>
 
@@ -67,14 +67,16 @@ useSeoMeta({
                 threats, or unwanted advances. Don't ask sellers for things that aren't related to
                 their sale. If someone messages you in a way that feels off, you can delete the
                 thread. If it crosses a line, email
-                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline">missap1214@gmail.com</a>
+                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline"
+                    >missap1214@gmail.com</a
+                >
                 and we'll handle it.
             </p>
 
             <h2 class="font-display text-xl font-bold text-gray-900">Meeting in person</h2>
             <p>
-                Garage sales happen in the real world. Garage Sale Tracker just shows you the map
-                — we're not a party to anything that happens between buyer and seller. Use common
+                Garage sales happen in the real world. Garage Sale Tracker just shows you the map —
+                we're not a party to anything that happens between buyer and seller. Use common
                 sense:
             </p>
             <ul class="ml-5 list-disc space-y-1.5">
@@ -86,8 +88,8 @@ useSeoMeta({
 
             <h2 class="font-display text-xl font-bold text-gray-900">No warranty</h2>
             <p>
-                The app is provided "as is." It might have bugs. Sales might end early. Routes
-                might miss something. We do our best, but we can't guarantee that posted sales are
+                The app is provided "as is." It might have bugs. Sales might end early. Routes might
+                miss something. We do our best, but we can't guarantee that posted sales are
                 accurate, that the route is the actual fastest, or that the app will be available
                 100% of the time. Use it as a tool, not gospel.
             </p>
@@ -107,19 +109,19 @@ useSeoMeta({
 
             <h2 class="font-display text-xl font-bold text-gray-900">Changes</h2>
             <p>
-                If these terms change in any meaningful way, the "Last updated" date will change
-                and you'll see an in-app notice next time you sign in.
+                If these terms change in any meaningful way, the "Last updated" date will change and
+                you'll see an in-app notice next time you sign in.
             </p>
 
             <h2 class="font-display text-xl font-bold text-gray-900">Governing law</h2>
-            <p>
-                These terms are governed by the laws of the State of Minnesota.
-            </p>
+            <p>These terms are governed by the laws of the State of Minnesota.</p>
 
             <h2 class="font-display text-xl font-bold text-gray-900">Contact</h2>
             <p>
                 Anything to flag, ask, or push back on?
-                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline">missap1214@gmail.com</a>.
+                <a href="mailto:missap1214@gmail.com" class="text-sky-700 hover:underline"
+                    >missap1214@gmail.com</a
+                >.
             </p>
         </div>
     </section>

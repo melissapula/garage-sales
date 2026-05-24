@@ -1,28 +1,28 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
-import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales'
+import type { GarageSale } from '~/composables/useGarageSales';
+import { GARAGE_SALE_SELECT } from '~/composables/useGarageSales';
 
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const { deletePhotos } = useSalePhotos()
-const toast = useToast()
-const { confirm } = useConfirm()
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const { deletePhotos } = useSalePhotos();
+const toast = useToast();
+const { confirm } = useConfirm();
 
 const { data: sales, refresh } = await useAsyncData<GarageSale[]>(
     'my-sales',
     async () => {
-        if (!user.value) return []
+        if (!user.value) return [];
         const { data, error } = await supabase
             .from('garage_sales')
             .select(GARAGE_SALE_SELECT)
             .eq('user_id', user.value.id)
             .is('deleted_at', null)
-            .order('start_date', { ascending: false })
-        if (error) throw error
-        return (data ?? []) as GarageSale[]
+            .order('start_date', { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as GarageSale[];
     },
     { watch: [user] },
-)
+);
 
 async function deleteSale(sale: GarageSale) {
     const ok = await confirm({
@@ -30,35 +30,35 @@ async function deleteSale(sale: GarageSale) {
         description: 'This cannot be undone.',
         confirmText: 'Delete',
         tone: 'danger',
-    })
-    if (!ok) return
+    });
+    if (!ok) return;
     // Soft-delete via deleted_at — see sale/[id].vue for the rationale
     // (tombstones in saved-sales / route-stops; cron purges in 30 days).
     const { error } = await supabase
         .from('garage_sales')
         .update({ deleted_at: new Date().toISOString() })
-        .eq('id', sale.id)
+        .eq('id', sale.id);
     if (error) {
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
     }
-    if (sale.photos?.length) deletePhotos(sale.photos).catch(() => {})
-    toast.success('Sale deleted.')
-    refresh()
+    if (sale.photos?.length) deletePhotos(sale.photos).catch(() => {});
+    toast.success('Sale deleted.');
+    refresh();
 }
 
 function statusLabel(s: GarageSale): string {
-    const status = saleStatus(s)
-    if (status === 'active') return 'Happening today'
-    if (status === 'upcoming') return 'Upcoming'
-    return 'Past'
+    const status = saleStatus(s);
+    if (status === 'active') return 'Happening today';
+    if (status === 'upcoming') return 'Upcoming';
+    return 'Past';
 }
 
 function statusClass(s: GarageSale): string {
-    const status = saleStatus(s)
-    if (status === 'active') return 'bg-green-100 text-green-800'
-    if (status === 'upcoming') return 'bg-yellow-100 text-yellow-800'
-    return 'bg-gray-100 text-gray-600'
+    const status = saleStatus(s);
+    if (status === 'active') return 'bg-green-100 text-green-800';
+    if (status === 'upcoming') return 'bg-yellow-100 text-yellow-800';
+    return 'bg-gray-100 text-gray-600';
 }
 </script>
 

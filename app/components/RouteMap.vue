@@ -1,69 +1,69 @@
 <script setup lang="ts">
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
-import type { GarageSale } from '~/composables/useGarageSales'
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import type { GarageSale } from '~/composables/useGarageSales';
 
 const props = defineProps<{
     /** Sales the user has added to this route, in (potentially manual) order. */
-    stops: { sale: GarageSale }[]
+    stops: { sale: GarageSale }[];
     /** Optimized visit order — array of indices into stops. Null = use stops as-is. */
-    order: number[] | null
+    order: number[] | null;
     /** Optimized route polyline. */
-    routeGeometry: GeoJSON.LineString | null
+    routeGeometry: GeoJSON.LineString | null;
     /** Driver's start location. */
-    start: { lng: number; lat: number; label?: string } | null
+    start: { lng: number; lat: number; label?: string } | null;
     /**
      * Custom end address pin (only set when the user picks "End at an address").
      * Round-trip mode shares the start pin; "End at last sale" reuses the
      * last stop's numbered pin — both leave this null.
      */
-    end?: { lng: number; lat: number; label?: string } | null
+    end?: { lng: number; lat: number; label?: string } | null;
     /**
      * Saved sales available on this route's date that aren't yet in the route.
      * Rendered as small status-colored pins with hover/click sync.
      */
-    available?: GarageSale[]
+    available?: GarageSale[];
     /** Currently click-selected available sale (persistent popover, pans map). */
-    selectedAvailableId?: string | null
+    selectedAvailableId?: string | null;
     /** Currently hovered available sale (transient popover). */
-    hoveredAvailableId?: string | null
-}>()
+    hoveredAvailableId?: string | null;
+}>();
 
 const emit = defineEmits<{
-    (e: 'select-available', saleId: string): void
-    (e: 'hover-available', saleId: string | null): void
-    (e: 'clear-available'): void
-}>()
+    (e: 'select-available', saleId: string): void;
+    (e: 'hover-available', saleId: string | null): void;
+    (e: 'clear-available'): void;
+}>();
 
-const config = useRuntimeConfig()
-const mapEl = ref<HTMLDivElement | null>(null)
-let map: mapboxgl.Map | null = null
-let resizeObserver: ResizeObserver | null = null
-const markers: mapboxgl.Marker[] = []
+const config = useRuntimeConfig();
+const mapEl = ref<HTMLDivElement | null>(null);
+let map: mapboxgl.Map | null = null;
+let resizeObserver: ResizeObserver | null = null;
+const markers: mapboxgl.Marker[] = [];
 
-const BEMIDJI: [number, number] = [-94.8826, 47.4716]
-const ROUTE_SOURCE_ID = 'route'
-const ROUTE_LAYER_ID = 'route-line'
+const BEMIDJI: [number, number] = [-94.8826, 47.4716];
+const ROUTE_SOURCE_ID = 'route';
+const ROUTE_LAYER_ID = 'route-line';
 
 // Available-pin popover state (matches BrowseMap's pattern).
-let activePopup: mapboxgl.Popup | null = null
-let activePopupSaleId: string | null = null
-let activePopupPersistent = false
-let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null
+let activePopup: mapboxgl.Popup | null = null;
+let activePopupSaleId: string | null = null;
+let activePopupPersistent = false;
+let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearMarkers() {
-    while (markers.length) markers.pop()?.remove()
+    while (markers.length) markers.pop()?.remove();
 }
 
 function clearHoverTimer() {
     if (hoverCloseTimer) {
-        clearTimeout(hoverCloseTimer)
-        hoverCloseTimer = null
+        clearTimeout(hoverCloseTimer);
+        hoverCloseTimer = null;
     }
 }
 
 function buildNumberedMarker(n: number): HTMLDivElement {
-    const el = document.createElement('div')
+    const el = document.createElement('div');
     el.style.cssText = `
         background: #F97316;
         color: white;
@@ -79,13 +79,13 @@ function buildNumberedMarker(n: number): HTMLDivElement {
         border: 3px solid white;
         box-shadow: 0 2px 8px rgba(0,0,0,0.25);
         cursor: pointer;
-    `
-    el.textContent = String(n)
-    return el
+    `;
+    el.textContent = String(n);
+    return el;
 }
 
 function buildAvailableMarker(color: string): HTMLDivElement {
-    const el = document.createElement('div')
+    const el = document.createElement('div');
     el.style.cssText = `
         background: ${color};
         width: 18px;
@@ -94,12 +94,12 @@ function buildAvailableMarker(color: string): HTMLDivElement {
         border: 2px solid white;
         box-shadow: 0 1px 4px rgba(0,0,0,0.25);
         cursor: pointer;
-    `
-    return el
+    `;
+    return el;
 }
 
 function buildStartMarker(label = 'You'): HTMLDivElement {
-    const el = document.createElement('div')
+    const el = document.createElement('div');
     el.style.cssText = `
         background: #0EA5E9;
         color: white;
@@ -115,15 +115,15 @@ function buildStartMarker(label = 'You'): HTMLDivElement {
         justify-content: center;
         border: 3px solid white;
         box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    `
-    el.textContent = label
-    return el
+    `;
+    el.textContent = label;
+    return el;
 }
 
 function buildEndMarker(label = 'End'): HTMLDivElement {
     // Same pill shape as the start marker but a different color so the
     // user can see start and end at a glance without consulting the legend.
-    const el = document.createElement('div')
+    const el = document.createElement('div');
     el.style.cssText = `
         background: #16A34A;
         color: white;
@@ -139,9 +139,9 @@ function buildEndMarker(label = 'End'): HTMLDivElement {
         justify-content: center;
         border: 3px solid white;
         box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    `
-    el.textContent = label
-    return el
+    `;
+    el.textContent = label;
+    return el;
 }
 
 function escapeHtml(s: string): string {
@@ -150,13 +150,13 @@ function escapeHtml(s: string): string {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
+        .replace(/'/g, '&#39;');
 }
 
 function buildAvailablePopupHtml(sale: GarageSale, withCloseButton: boolean): string {
     const closeBtn = withCloseButton
         ? `<button type="button" data-popup-close style="position:absolute;top:4px;right:4px;width:22px;height:22px;border:0;background:transparent;cursor:pointer;color:#9ca3af;font-size:18px;line-height:1;padding:0;" aria-label="Close">×</button>`
-        : ''
+        : '';
     return `
         <div style="font-family:'DM Sans',sans-serif;max-width:220px;position:relative;padding-right:${withCloseButton ? '20px' : '0'};">
             ${closeBtn}
@@ -166,20 +166,20 @@ function buildAvailablePopupHtml(sale: GarageSale, withCloseButton: boolean): st
             <div style="margin-top:3px;font-size:12px;color:#374151;">${escapeHtml(sale.address)}</div>
             <div style="margin-top:5px;font-size:11px;color:#6B7280;font-style:italic;">Saved — not yet in your route</div>
         </div>
-    `
+    `;
 }
 
 function showAvailablePopup(saleId: string, persistent: boolean) {
-    if (!map) return
-    const sale = (props.available ?? []).find((s) => s.id === saleId)
-    if (!sale) return
+    if (!map) return;
+    const sale = (props.available ?? []).find((s) => s.id === saleId);
+    if (!sale) return;
 
-    clearHoverTimer()
+    clearHoverTimer();
 
-    if (activePopupSaleId === saleId && activePopupPersistent === persistent) return
+    if (activePopupSaleId === saleId && activePopupPersistent === persistent) return;
     if (activePopup) {
-        activePopup.remove()
-        activePopup = null
+        activePopup.remove();
+        activePopup = null;
     }
 
     activePopup = new mapboxgl.Popup({
@@ -190,14 +190,14 @@ function showAvailablePopup(saleId: string, persistent: boolean) {
     })
         .setLngLat([sale.lng, sale.lat])
         .setHTML(buildAvailablePopupHtml(sale, persistent))
-        .addTo(map)
-    activePopupSaleId = saleId
-    activePopupPersistent = persistent
+        .addTo(map);
+    activePopupSaleId = saleId;
+    activePopupPersistent = persistent;
 
-    const popupEl = activePopup.getElement()
+    const popupEl = activePopup.getElement();
     if (!persistent) {
-        popupEl.addEventListener('mouseenter', clearHoverTimer)
-        popupEl.addEventListener('mouseleave', scheduleHoverClose)
+        popupEl.addEventListener('mouseenter', clearHoverTimer);
+        popupEl.addEventListener('mouseleave', scheduleHoverClose);
     } else {
         // Pan/zoom in to make the pin visible.
         map.flyTo({
@@ -205,36 +205,36 @@ function showAvailablePopup(saleId: string, persistent: boolean) {
             zoom: Math.max(map.getZoom(), 13),
             duration: 600,
             essential: true,
-        })
+        });
     }
 }
 
 function closeActivePopup() {
-    activePopup?.remove()
-    activePopup = null
-    activePopupSaleId = null
-    activePopupPersistent = false
+    activePopup?.remove();
+    activePopup = null;
+    activePopupSaleId = null;
+    activePopupPersistent = false;
 }
 
 function scheduleHoverClose() {
-    clearHoverTimer()
+    clearHoverTimer();
     hoverCloseTimer = setTimeout(() => {
         if (!activePopupPersistent) {
-            closeActivePopup()
-            emit('hover-available', null)
+            closeActivePopup();
+            emit('hover-available', null);
         }
-    }, 250)
+    }, 250);
 }
 
 function render() {
-    if (!map) return
-    clearMarkers()
+    if (!map) return;
+    clearMarkers();
 
-    const order = props.order ?? props.stops.map((_, i) => i)
+    const order = props.order ?? props.stops.map((_, i) => i);
 
     order.forEach((stopIdx, visitIdx) => {
-        const stop = props.stops[stopIdx]
-        if (!stop) return
+        const stop = props.stops[stopIdx];
+        if (!stop) return;
         const marker = new mapboxgl.Marker({ element: buildNumberedMarker(visitIdx + 1) })
             .setLngLat([stop.sale.lng, stop.sale.lat])
             .setPopup(
@@ -245,59 +245,59 @@ function render() {
                     </div>`,
                 ),
             )
-            .addTo(map!)
-        markers.push(marker)
-    })
+            .addTo(map!);
+        markers.push(marker);
+    });
 
     if (props.start) {
         const startMarker = new mapboxgl.Marker({ element: buildStartMarker(props.start.label) })
             .setLngLat([props.start.lng, props.start.lat])
-            .addTo(map)
-        markers.push(startMarker)
+            .addTo(map);
+        markers.push(startMarker);
     }
 
     if (props.end) {
         const endMarker = new mapboxgl.Marker({ element: buildEndMarker(props.end.label) })
             .setLngLat([props.end.lng, props.end.lat])
-            .addTo(map)
-        markers.push(endMarker)
+            .addTo(map);
+        markers.push(endMarker);
     }
 
     // Available (saved-but-not-added) sales as small status-colored pins
     // with hover + click sync back to the parent.
     for (const sale of props.available ?? []) {
-        const color = pinColor(saleStatus(sale))
+        const color = pinColor(saleStatus(sale));
         const marker = new mapboxgl.Marker({ element: buildAvailableMarker(color) })
             .setLngLat([sale.lng, sale.lat])
-            .addTo(map!)
-        const el = marker.getElement()
+            .addTo(map!);
+        const el = marker.getElement();
         el.addEventListener('mouseenter', () => {
-            if (activePopupPersistent) return
-            emit('hover-available', sale.id)
-        })
+            if (activePopupPersistent) return;
+            emit('hover-available', sale.id);
+        });
         el.addEventListener('mouseleave', () => {
-            if (activePopupPersistent) return
-            scheduleHoverClose()
-        })
+            if (activePopupPersistent) return;
+            scheduleHoverClose();
+        });
         el.addEventListener('click', (e) => {
-            e.stopPropagation()
-            emit('select-available', sale.id)
-        })
-        markers.push(marker)
+            e.stopPropagation();
+            emit('select-available', sale.id);
+        });
+        markers.push(marker);
     }
 
     // Route polyline.
-    const existing = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined
+    const existing = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (props.routeGeometry) {
         const geo: GeoJSON.Feature<GeoJSON.LineString> = {
             type: 'Feature',
             properties: {},
             geometry: props.routeGeometry,
-        }
+        };
         if (existing) {
-            existing.setData(geo)
+            existing.setData(geo);
         } else {
-            map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geo })
+            map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geo });
             map.addLayer({
                 id: ROUTE_LAYER_ID,
                 type: 'line',
@@ -308,74 +308,74 @@ function render() {
                     'line-opacity': 0.85,
                 },
                 layout: { 'line-cap': 'round', 'line-join': 'round' },
-            })
+            });
         }
     } else if (existing) {
-        existing.setData({ type: 'FeatureCollection', features: [] } as GeoJSON.FeatureCollection)
+        existing.setData({ type: 'FeatureCollection', features: [] } as GeoJSON.FeatureCollection);
     }
 
     // Fit to all known points.
-    const allCoords: [number, number][] = props.stops.map((s) => [s.sale.lng, s.sale.lat])
-    if (props.start) allCoords.push([props.start.lng, props.start.lat])
-    if (props.end) allCoords.push([props.end.lng, props.end.lat])
+    const allCoords: [number, number][] = props.stops.map((s) => [s.sale.lng, s.sale.lat]);
+    if (props.start) allCoords.push([props.start.lng, props.start.lat]);
+    if (props.end) allCoords.push([props.end.lng, props.end.lat]);
     for (const sale of props.available ?? []) {
-        allCoords.push([sale.lng, sale.lat])
+        allCoords.push([sale.lng, sale.lat]);
     }
     if (allCoords.length > 0) {
         const bounds = allCoords.reduce(
             (b, c) => b.extend(c),
             new mapboxgl.LngLatBounds(allCoords[0], allCoords[0]),
-        )
-        map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 })
+        );
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
     }
 }
 
 function syncFromProps() {
     if (props.selectedAvailableId) {
-        showAvailablePopup(props.selectedAvailableId, true)
+        showAvailablePopup(props.selectedAvailableId, true);
     } else if (props.hoveredAvailableId) {
-        showAvailablePopup(props.hoveredAvailableId, false)
+        showAvailablePopup(props.hoveredAvailableId, false);
     } else {
-        closeActivePopup()
+        closeActivePopup();
     }
 }
 
 onMounted(() => {
-    if (!mapEl.value) return
-    mapboxgl.accessToken = config.public.mapboxToken as string
+    if (!mapEl.value) return;
+    mapboxgl.accessToken = config.public.mapboxToken as string;
     map = new mapboxgl.Map({
         container: mapEl.value,
         style: 'mapbox://styles/mapbox/streets-v12',
         center: BEMIDJI,
         zoom: 11,
-    })
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right')
+    });
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
     // Click handler for popup close button + click-outside.
     mapEl.value.addEventListener('click', (ev) => {
-        const target = ev.target as HTMLElement | null
-        if (!target) return
-        const closeBtn = target.closest('[data-popup-close]')
+        const target = ev.target as HTMLElement | null;
+        if (!target) return;
+        const closeBtn = target.closest('[data-popup-close]');
         if (closeBtn) {
-            ev.stopPropagation()
-            emit('clear-available')
-            return
+            ev.stopPropagation();
+            emit('clear-available');
+            return;
         }
-        const onMarker = target.closest('.mapboxgl-marker')
-        const onPopup = target.closest('.mapboxgl-popup')
+        const onMarker = target.closest('.mapboxgl-marker');
+        const onPopup = target.closest('.mapboxgl-popup');
         if (!onMarker && !onPopup && activePopupPersistent) {
-            emit('clear-available')
+            emit('clear-available');
         }
-    })
+    });
 
     map.on('click', () => {
-        if (activePopupPersistent) emit('clear-available')
-    })
+        if (activePopupPersistent) emit('clear-available');
+    });
 
     map.on('load', () => {
-        render()
-        syncFromProps()
-    })
+        render();
+        syncFromProps();
+    });
 
     // Mapbox's built-in trackResize only fires on *window* resizes, so
     // the canvas would freeze at its initial container width whenever
@@ -384,20 +384,20 @@ onMounted(() => {
     // container itself and resize on every change. Same fix we applied
     // to BrowseMap for the same reason.
     resizeObserver = new ResizeObserver(() => {
-        map?.resize()
-    })
-    resizeObserver.observe(mapEl.value)
-})
+        map?.resize();
+    });
+    resizeObserver.observe(mapEl.value);
+});
 
 onBeforeUnmount(() => {
-    clearHoverTimer()
-    closeActivePopup()
-    clearMarkers()
-    resizeObserver?.disconnect()
-    resizeObserver = null
-    map?.remove()
-    map = null
-})
+    clearHoverTimer();
+    closeActivePopup();
+    clearMarkers();
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    map?.remove();
+    map = null;
+});
 
 // Stable signature watch instead of deep on the prop arrays — same
 // pattern BrowseMap uses (id:lat:lng per pin). A non-spatial property
@@ -407,36 +407,42 @@ onBeforeUnmount(() => {
 // `props.available.find(...)` on each open so non-marker fields stay
 // live without a rebuild.
 const renderSignature = computed(() => {
-    const stopSig = props.stops.map((s) => `${s.sale.id}:${s.sale.lat}:${s.sale.lng}`).join('|')
-    const orderSig = props.order ? props.order.join(',') : 'natural'
+    const stopSig = props.stops.map((s) => `${s.sale.id}:${s.sale.lat}:${s.sale.lng}`).join('|');
+    const orderSig = props.order ? props.order.join(',') : 'natural';
     const startSig = props.start
         ? `${props.start.lng}:${props.start.lat}:${props.start.label ?? ''}`
-        : 'none'
+        : 'none';
     const endSig = props.end
         ? `${props.end.lng}:${props.end.lat}:${props.end.label ?? ''}`
-        : 'none'
-    const availSig = (props.available ?? []).map((s) => `${s.id}:${s.lat}:${s.lng}`).join('|')
-    return `${stopSig}#${orderSig}#${startSig}#${endSig}#${availSig}`
-})
+        : 'none';
+    const availSig = (props.available ?? []).map((s) => `${s.id}:${s.lat}:${s.lng}`).join('|');
+    return `${stopSig}#${orderSig}#${startSig}#${endSig}#${availSig}`;
+});
 watch(renderSignature, () => {
     if (map?.loaded()) {
-        render()
-        syncFromProps()
+        render();
+        syncFromProps();
     }
-})
+});
 // Geometry is a complex GeoJSON object; reference equality is the right
 // granularity here (a new optimize call always produces a new ref).
-watch(() => props.routeGeometry, () => {
-    if (map?.loaded()) {
-        render()
-        syncFromProps()
-    }
-})
-watch(() => props.selectedAvailableId, syncFromProps)
-watch(() => props.hoveredAvailableId, () => {
-    if (props.selectedAvailableId) return
-    syncFromProps()
-})
+watch(
+    () => props.routeGeometry,
+    () => {
+        if (map?.loaded()) {
+            render();
+            syncFromProps();
+        }
+    },
+);
+watch(() => props.selectedAvailableId, syncFromProps);
+watch(
+    () => props.hoveredAvailableId,
+    () => {
+        if (props.selectedAvailableId) return;
+        syncFromProps();
+    },
+);
 </script>
 
 <template>

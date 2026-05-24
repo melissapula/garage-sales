@@ -1,10 +1,10 @@
 <script setup lang="ts">
-const { pending, answer } = useConfirm()
+const { pending, answer } = useConfirm();
 
-const dialogEl = ref<HTMLElement | null>(null)
-const isOpen = computed(() => !!pending.value)
+const dialogEl = ref<HTMLElement | null>(null);
+const isOpen = computed(() => !!pending.value);
 
-useFocusTrap(dialogEl, isOpen)
+useFocusTrap(dialogEl, isOpen);
 
 // Escape closes (cancels). Enter is intentionally NOT handled globally
 // here — the previous version fired the destructive action on Enter
@@ -13,35 +13,35 @@ useFocusTrap(dialogEl, isOpen)
 // button (browser-default click activation), and the focus trap focuses
 // the Cancel button on open so Enter on first paint cancels.
 function onKeydown(ev: KeyboardEvent) {
-    if (!pending.value) return
-    if (ev.key === 'Escape') answer(false)
+    if (!pending.value) return;
+    if (ev.key === 'Escape') answer(false);
 }
 
 watch(pending, (p) => {
-    if (typeof document === 'undefined') return
+    if (typeof document === 'undefined') return;
     if (p) {
-        document.body.style.overflow = 'hidden'
-        document.addEventListener('keydown', onKeydown)
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', onKeydown);
     } else {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
 onBeforeUnmount(() => {
     if (typeof document !== 'undefined') {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
 const confirmButtonClass = computed(() => {
-    const tone = pending.value?.options.tone ?? 'default'
+    const tone = pending.value?.options.tone ?? 'default';
     if (tone === 'danger') {
-        return 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500'
+        return 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500';
     }
-    return 'bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500'
-})
+    return 'bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500';
+});
 </script>
 
 <template>
@@ -58,10 +58,7 @@ const confirmButtonClass = computed(() => {
                 <h3 id="confirm-modal-title" class="font-display text-lg font-bold text-gray-900">
                     {{ pending.options.title }}
                 </h3>
-                <p
-                    v-if="pending.options.description"
-                    class="mt-2 text-sm text-gray-700"
-                >
+                <p v-if="pending.options.description" class="mt-2 text-sm text-gray-700">
                     {{ pending.options.description }}
                 </p>
                 <div class="mt-5 flex justify-end gap-2">

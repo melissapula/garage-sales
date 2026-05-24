@@ -1,35 +1,35 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
+import type { GarageSale } from '~/composables/useGarageSales';
 
 const props = defineProps<{
-    sale: GarageSale
-}>()
+    sale: GarageSale;
+}>();
 
 const emit = defineEmits<{
-    (e: 'clear'): void
-}>()
+    (e: 'clear'): void;
+}>();
 
-const user = useSupabaseUser()
-const { isSaved, save, unsave } = useSavedSales()
+const user = useSupabaseUser();
+const { isSaved, save, unsave } = useSavedSales();
 
-const status = computed(() => saleStatus(props.sale))
-const schedule = computed(() => summarizeSchedule(props.sale))
+const status = computed(() => saleStatus(props.sale));
+const schedule = computed(() => summarizeSchedule(props.sale));
 
-const lightboxIndex = ref<number | null>(null)
+const lightboxIndex = ref<number | null>(null);
 
-const saving = ref(false)
+const saving = ref(false);
 async function onLetsGo() {
     if (!user.value) {
-        navigateTo('/login')
-        return
+        navigateTo('/login');
+        return;
     }
-    saving.value = true
+    saving.value = true;
     if (isSaved(props.sale.id)) {
-        await unsave(props.sale.id)
+        await unsave(props.sale.id);
     } else {
-        await save(props.sale.id)
+        await save(props.sale.id);
     }
-    saving.value = false
+    saving.value = false;
 }
 </script>
 
@@ -90,10 +90,7 @@ async function onLetsGo() {
             </template>
         </div>
 
-        <div
-            v-if="sale.photos && sale.photos.length"
-            class="mt-4 grid grid-cols-3 gap-1.5"
-        >
+        <div v-if="sale.photos && sale.photos.length" class="mt-4 grid grid-cols-3 gap-1.5">
             <button
                 v-for="(url, i) in sale.photos"
                 :key="url"

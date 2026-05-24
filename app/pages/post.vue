@@ -1,130 +1,139 @@
 <script setup lang="ts">
-import { emptyDay, scheduleDates, scheduleEnvelope, validateSchedule, type ScheduleDay } from '~/utils/schedule'
+import {
+    emptyDay,
+    scheduleDates,
+    scheduleEnvelope,
+    validateSchedule,
+    type ScheduleDay,
+} from '~/utils/schedule';
 
-const supabase = useSupabaseClient()
-const user = useSupabaseUser()
-const router = useRouter()
-const toast = useToast()
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+const router = useRouter();
+const toast = useToast();
 
-const today = todayLocalISO()
+const today = todayLocalISO();
 
-const title = ref('')
-const description = ref('')
-const addressInput = ref('')
-const resolved = ref<{ address: string; lat: number; lng: number } | null>(null)
-const days = ref<ScheduleDay[]>([emptyDay()])
-const photos = ref<string[]>([])
-const contactEnabled = ref(true)
+const title = ref('');
+const description = ref('');
+const addressInput = ref('');
+const resolved = ref<{ address: string; lat: number; lng: number } | null>(null);
+const days = ref<ScheduleDay[]>([emptyDay()]);
+const photos = ref<string[]>([]);
+const contactEnabled = ref(true);
 
-const error = ref<string | null>(null)
-const geocoding = ref(false)
-const saving = ref(false)
+const error = ref<string | null>(null);
+const geocoding = ref(false);
+const saving = ref(false);
 
 // Re-geocode forces the user to confirm whenever they edit the address text.
 watch(addressInput, () => {
     if (resolved.value && resolved.value.address !== addressInput.value) {
-        resolved.value = null
+        resolved.value = null;
     }
-})
+});
 
 const validationError = computed<string | null>(() => {
-    if (!title.value.trim()) return 'Add a title.'
-    if (!resolved.value) return 'Find the address on the map first.'
-    return validateSchedule(days.value)
-})
+    if (!title.value.trim()) return 'Add a title.';
+    if (!resolved.value) return 'Find the address on the map first.';
+    return validateSchedule(days.value);
+});
 
-const isValid = computed(() => validationError.value === null)
+const isValid = computed(() => validationError.value === null);
 
 function addDay() {
     // Default the new row's date to one day after the last filled date,
     // so adding "another day" tends to mean "the next day" by default.
-    const dates = days.value.map((d) => d.date).filter(Boolean).sort()
-    let next = ''
+    const dates = days.value
+        .map((d) => d.date)
+        .filter(Boolean)
+        .sort();
+    let next = '';
     if (dates.length) {
-        const last = new Date(dates[dates.length - 1] + 'T00:00:00')
-        last.setDate(last.getDate() + 1)
-        next = toLocalISO(last)
+        const last = new Date(dates[dates.length - 1] + 'T00:00:00');
+        last.setDate(last.getDate() + 1);
+        next = toLocalISO(last);
     }
     // Inherit the previous row's times if it had any — most multi-day
     // sales DO use the same hours every day, and per-day variation is
     // the exception worth typing into.
-    const prev = days.value[days.value.length - 1]
+    const prev = days.value[days.value.length - 1];
     days.value.push({
         date: next,
         start_time: prev?.start_time ?? '',
         end_time: prev?.end_time ?? '',
-    })
+    });
 }
 
 function removeDay(i: number) {
     if (days.value.length === 1) {
         // Don't let the user remove the last row — the form requires
         // at least one day. Reset it instead.
-        days.value[0] = emptyDay()
-        return
+        days.value[0] = emptyDay();
+        return;
     }
-    days.value.splice(i, 1)
+    days.value.splice(i, 1);
 }
 
 async function findAddress() {
-    error.value = null
+    error.value = null;
     if (!addressInput.value.trim()) {
-        error.value = 'Enter an address first.'
-        return
+        error.value = 'Enter an address first.';
+        return;
     }
-    geocoding.value = true
+    geocoding.value = true;
     try {
-        const result = await geocodeAddress(addressInput.value.trim())
+        const result = await geocodeAddress(addressInput.value.trim());
         if (!result) {
-            error.value = "Couldn't find that address. Try adding city/state."
-            resolved.value = null
-            return
+            error.value = "Couldn't find that address. Try adding city/state.";
+            resolved.value = null;
+            return;
         }
-        resolved.value = result
-        addressInput.value = result.address
+        resolved.value = result;
+        addressInput.value = result.address;
     } catch (e: unknown) {
-        error.value = e instanceof Error ? e.message : 'Geocoding failed'
+        error.value = e instanceof Error ? e.message : 'Geocoding failed';
     } finally {
-        geocoding.value = false
+        geocoding.value = false;
     }
 }
 
 async function submit() {
-    error.value = null
+    error.value = null;
     if (!isValid.value) {
-        error.value = validationError.value
-        return
+        error.value = validationError.value;
+        return;
     }
     if (!user.value) {
-        error.value = 'You need to be signed in.'
-        return
+        error.value = 'You need to be signed in.';
+        return;
     }
-    saving.value = true
+    saving.value = true;
 
-    const dates = scheduleDates(days.value)
-    const envelope = scheduleEnvelope(days.value)
+    const dates = scheduleDates(days.value);
+    const envelope = scheduleEnvelope(days.value);
 
     // Reject if another active sale at the same address shares any day
     // with this one. The retry helper tries twice; if both attempts fail
     // we still post, but flag the user so they can sanity-check the map.
-    let dupCheckFailed = false
+    let dupCheckFailed = false;
     try {
         const conflict = await findOverlappingSaleWithRetry(
             user.value.id,
             resolved.value!.lat,
             resolved.value!.lng,
             dates,
-        )
+        );
         if (conflict) {
-            saving.value = false
-            const dayList = conflict.conflictDates.join(', ')
+            saving.value = false;
+            const dayList = conflict.conflictDates.join(', ');
             error.value =
                 `You've already got a sale at this address on ${dayList}: ` +
-                `"${conflict.title}". Edit that one instead, or pick different days.`
-            return
+                `"${conflict.title}". Edit that one instead, or pick different days.`;
+            return;
         }
     } catch {
-        dupCheckFailed = true
+        dupCheckFailed = true;
     }
 
     const { data, error: err } = await supabase
@@ -148,40 +157,38 @@ async function submit() {
             contact_enabled: contactEnabled.value,
         })
         .select('id')
-        .single()
+        .single();
     if (err) {
-        saving.value = false
-        error.value = err.message
-        return
+        saving.value = false;
+        error.value = err.message;
+        return;
     }
 
     // Bulk-insert the per-day rows. Trigger will recompute the envelope
     // (no-op here since it already matches what we passed above).
-    const { error: dErr } = await supabase
-        .from('sale_dates')
-        .insert(
-            days.value.map((d) => ({
-                sale_id: data.id,
-                sale_date: d.date,
-                start_time: d.start_time,
-                end_time: d.end_time,
-            })),
-        )
-    saving.value = false
+    const { error: dErr } = await supabase.from('sale_dates').insert(
+        days.value.map((d) => ({
+            sale_id: data.id,
+            sale_date: d.date,
+            start_time: d.start_time,
+            end_time: d.end_time,
+        })),
+    );
+    saving.value = false;
     if (dErr) {
         // Roll back the parent so the user isn't stuck with an orphaned
         // sale_dates-less row (which would 500 the cards' time formatter).
-        await supabase.from('garage_sales').delete().eq('id', data.id)
-        error.value = `Couldn't save the schedule: ${dErr.message}`
-        return
+        await supabase.from('garage_sales').delete().eq('id', data.id);
+        error.value = `Couldn't save the schedule: ${dErr.message}`;
+        return;
     }
 
     if (dupCheckFailed) {
         toast.info(
             "We couldn't verify you don't already have a sale at this address. Your post is live — please double-check 'My sales' and remove a duplicate if you spot one.",
-        )
+        );
     }
-    router.push(`/sale/${data.id}`)
+    router.push(`/sale/${data.id}`);
 }
 </script>
 
@@ -270,7 +277,9 @@ async function submit() {
                         class="rounded-lg bg-white p-3 ring-1 ring-orange-100"
                     >
                         <div class="mb-2 flex items-center justify-between">
-                            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            <span
+                                class="text-xs font-semibold uppercase tracking-wide text-gray-500"
+                            >
                                 Day {{ i + 1 }}
                             </span>
                             <button
@@ -331,7 +340,9 @@ async function submit() {
                 <PhotoUploader v-model="photos" class="mt-1" />
             </div>
 
-            <label class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100">
+            <label
+                class="flex cursor-pointer items-start gap-2 rounded-lg bg-white p-3 ring-1 ring-orange-100"
+            >
                 <input
                     v-model="contactEnabled"
                     type="checkbox"
@@ -347,25 +358,15 @@ async function submit() {
                 </span>
             </label>
 
-            <p
-                v-if="error"
-                class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
+            <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 {{ error }}
             </p>
-            <p
-                v-else-if="!isValid"
-                class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800"
-            >
+            <p v-else-if="!isValid" class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {{ validationError }}
             </p>
 
             <div class="flex gap-3">
-                <button
-                    type="submit"
-                    class="btn-primary"
-                    :disabled="saving || !isValid"
-                >
+                <button type="submit" class="btn-primary" :disabled="saving || !isValid">
                     {{ saving ? 'Posting…' : 'Post sale' }}
                 </button>
                 <NuxtLink to="/browse" class="btn-secondary">Cancel</NuxtLink>

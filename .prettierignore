@@ -1,0 +1,8 @@
+node_modules
+.nuxt
+.output
+dist
+build
+public/sw.js
+public/workbox-*.js
+package-lock.json

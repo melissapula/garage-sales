@@ -1,8 +1,8 @@
-import * as Sentry from '@sentry/nuxt'
+import * as Sentry from '@sentry/nuxt';
 
 // Only initialize if a DSN is set. Lets local dev (and any deploy
 // without the env var) run without Sentry chatter.
-const dsn = process.env.NUXT_PUBLIC_SENTRY_DSN
+const dsn = process.env.NUXT_PUBLIC_SENTRY_DSN;
 
 if (dsn) {
     Sentry.init({
@@ -14,5 +14,5 @@ if (dsn) {
         replaysSessionSampleRate: 0,
         // But do replay sessions where an error happened, for 10% of errors.
         replaysOnErrorSampleRate: 0.1,
-    })
+    });
 }

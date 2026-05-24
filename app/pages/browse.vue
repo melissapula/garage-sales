@@ -1,37 +1,36 @@
 <script setup lang="ts">
-import {
-    type BrowseFiltersValue,
-    applyFilters,
-    emptyFilters,
-} from '~/utils/filters'
-import { getCurrentPosition } from '~/composables/useRouteOptimizer'
+import { type BrowseFiltersValue, applyFilters, emptyFilters } from '~/utils/filters';
+import { getCurrentPosition } from '~/composables/useRouteOptimizer';
 
-const { savedSet, save, refresh: refreshSaved } = useSavedSales()
-const user = useSupabaseUser()
-const route = useRoute()
-const router = useRouter()
+const { savedSet, save, refresh: refreshSaved } = useSavedSales();
+const user = useSupabaseUser();
+const route = useRoute();
+const router = useRouter();
 
-const showWelcome = ref(route.query.welcome === '1')
+const showWelcome = ref(route.query.welcome === '1');
 function dismissWelcome() {
-    showWelcome.value = false
-    const next = { ...route.query }
-    delete next.welcome
-    router.replace({ query: next })
+    showWelcome.value = false;
+    const next = { ...route.query };
+    delete next.welcome;
+    router.replace({ query: next });
 }
 
-const { data: sales, pending, error, refresh } = await useAsyncData('active-sales', () =>
-    fetchActiveSales(),
-)
+const {
+    data: sales,
+    pending,
+    error,
+    refresh,
+} = await useAsyncData('active-sales', () => fetchActiveSales());
 
 // Track when the data was last fetched so we can self-heal stale tabs.
-const lastFetchedAt = ref(Date.now())
+const lastFetchedAt = ref(Date.now());
 async function refreshSales() {
-    await refresh()
-    lastFetchedAt.value = Date.now()
+    await refresh();
+    lastFetchedAt.value = Date.now();
 }
 
-onMounted(refreshSaved)
-watch(user, refreshSaved)
+onMounted(refreshSaved);
+watch(user, refreshSaved);
 
 // Reactive "today" so the client-side expiry filter below re-evaluates
 // when the date rolls over while the tab is open. Bumped every time the
@@ -40,72 +39,72 @@ watch(user, refreshSaved)
 // handler also kicks off a data refresh if the cached payload is older
 // than 5 minutes — covers the "left /browse open Wednesday, came back
 // Friday" path that was leaking expired sales.
-const today = ref(todayLocalISO())
-const STALE_MS = 5 * 60 * 1000
-let heartbeat: ReturnType<typeof setInterval> | null = null
+const today = ref(todayLocalISO());
+const STALE_MS = 5 * 60 * 1000;
+let heartbeat: ReturnType<typeof setInterval> | null = null;
 function refreshToday() {
-    today.value = todayLocalISO()
+    today.value = todayLocalISO();
 }
 function onVisibility() {
-    if (document.visibilityState !== 'visible') return
-    refreshToday()
-    if (Date.now() - lastFetchedAt.value > STALE_MS) refreshSales()
+    if (document.visibilityState !== 'visible') return;
+    refreshToday();
+    if (Date.now() - lastFetchedAt.value > STALE_MS) refreshSales();
 }
 onMounted(() => {
-    if (typeof document === 'undefined') return
-    document.addEventListener('visibilitychange', onVisibility)
-    heartbeat = setInterval(refreshToday, STALE_MS)
-})
+    if (typeof document === 'undefined') return;
+    document.addEventListener('visibilitychange', onVisibility);
+    heartbeat = setInterval(refreshToday, STALE_MS);
+});
 onBeforeUnmount(() => {
     if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVisibility)
+        document.removeEventListener('visibilitychange', onVisibility);
     }
-    if (heartbeat) clearInterval(heartbeat)
-})
+    if (heartbeat) clearInterval(heartbeat);
+});
 
 // Filters. Defensive expiry check on top of fetchActiveSales' DB
 // filter — covers stale cached payloads (Nuxt useAsyncData returns the
 // SSR result on revisit) and SSR-vs-client timezone drift (Vercel runs
 // in UTC; a CT user before midnight CT but after midnight UTC would
 // otherwise see sales the server marked as still-active).
-const filters = ref<BrowseFiltersValue>(emptyFilters())
+const filters = ref<BrowseFiltersValue>(emptyFilters());
 const activeSales = computed(() => {
-    const todayDate = new Date(today.value + 'T00:00:00')
-    return (sales.value ?? []).filter((s) => !isExpiredSale(s, todayDate))
-})
-const filteredSales = computed(() => applyFilters(activeSales.value, filters.value))
+    const todayDate = new Date(today.value + 'T00:00:00');
+    return (sales.value ?? []).filter((s) => !isExpiredSale(s, todayDate));
+});
+const filteredSales = computed(() => applyFilters(activeSales.value, filters.value));
 
 // Selection / hover state
-const selectedId = ref<string | null>(null)
-const hoveredId = ref<string | null>(null)
+const selectedId = ref<string | null>(null);
+const hoveredId = ref<string | null>(null);
 
 const selectedSale = computed(() =>
-    selectedId.value ? (sales.value ?? []).find((s) => s.id === selectedId.value) ?? null : null,
-)
+    selectedId.value ? ((sales.value ?? []).find((s) => s.id === selectedId.value) ?? null) : null,
+);
 
 function onSelect(saleId: string) {
-    selectedId.value = saleId
+    selectedId.value = saleId;
 }
 
 function onHover(saleId: string | null) {
-    hoveredId.value = saleId
+    hoveredId.value = saleId;
 }
 
 function clearSelection() {
-    selectedId.value = null
+    selectedId.value = null;
     // On mobile, browsers fire a synthesized mouseenter on tap, leaving
     // hoveredId set after a pin tap. Without clearing it here, the popover
     // would re-render as a transient hover popup (no X) when selection
     // clears, leaving the user with a popover they can't dismiss.
-    hoveredId.value = null
+    hoveredId.value = null;
 }
 
 async function onLetsGo(saleId: string) {
     if (!user.value) {
-        navigateTo('/login')
-        return
+        navigateTo('/login');
+        return;
     }
-    await save(saleId)
+    await save(saleId);
 }
 
 // Center the map on the user's location on first visit, with the choice
@@ -120,31 +119,31 @@ async function onLetsGo(saleId: string) {
 // Key is namespaced by user id (or 'anon') so a shared device doesn't
 // leak user A's coords to user B's first browse after sign-out.
 function locationKey(): string {
-    return `gst:user-location:${user.value?.id ?? 'anon'}`
+    return `gst:user-location:${user.value?.id ?? 'anon'}`;
 }
-const GRANTED_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const DENIED_TTL_MS = 24 * 60 * 60 * 1000
+const GRANTED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DENIED_TTL_MS = 24 * 60 * 60 * 1000;
 type CachedLocation =
     | { asked: true; granted: true; lng: number; lat: number; ts: number }
-    | { asked: true; granted: false; ts: number }
-const userCenter = ref<[number, number] | null>(null)
+    | { asked: true; granted: false; ts: number };
+const userCenter = ref<[number, number] | null>(null);
 
 function readLocationCache(): CachedLocation | null {
-    if (typeof localStorage === 'undefined') return null
+    if (typeof localStorage === 'undefined') return null;
     try {
-        const raw = localStorage.getItem(locationKey())
-        if (!raw) return null
-        const cached = JSON.parse(raw) as CachedLocation
-        const age = Date.now() - (cached.ts ?? 0)
-        const ttl = cached.granted ? GRANTED_TTL_MS : DENIED_TTL_MS
+        const raw = localStorage.getItem(locationKey());
+        if (!raw) return null;
+        const cached = JSON.parse(raw) as CachedLocation;
+        const age = Date.now() - (cached.ts ?? 0);
+        const ttl = cached.granted ? GRANTED_TTL_MS : DENIED_TTL_MS;
         if (age > ttl) {
             // Stale — drop it so we re-prompt and refresh the coords.
-            localStorage.removeItem(locationKey())
-            return null
+            localStorage.removeItem(locationKey());
+            return null;
         }
-        return cached
+        return cached;
     } catch {
-        return null
+        return null;
     }
 }
 
@@ -161,14 +160,14 @@ async function applyUserLocationToFilter(lng: number, lat: number) {
     filters.value = {
         ...filters.value,
         location: { lng, lat, label: 'Your location' },
-    }
+    };
     try {
-        const label = await reverseGeocode(lng, lat)
+        const label = await reverseGeocode(lng, lat);
         if (label && filters.value.location) {
             filters.value = {
                 ...filters.value,
                 location: { lng, lat, label },
-            }
+            };
         }
     } catch {
         // keep the placeholder
@@ -176,47 +175,57 @@ async function applyUserLocationToFilter(lng: number, lat: number) {
 }
 
 if (import.meta.client) {
-    const cached = readLocationCache()
+    const cached = readLocationCache();
     if (cached?.granted) {
-        userCenter.value = [cached.lng, cached.lat]
-        applyUserLocationToFilter(cached.lng, cached.lat)
+        userCenter.value = [cached.lng, cached.lat];
+        applyUserLocationToFilter(cached.lng, cached.lat);
     }
 }
 
 onMounted(async () => {
-    if (!import.meta.client) return
-    if (readLocationCache()) return // already asked recently — skip prompt
+    if (!import.meta.client) return;
+    if (readLocationCache()) return; // already asked recently — skip prompt
 
     try {
-        const pos = await getCurrentPosition()
-        userCenter.value = [pos.lng, pos.lat]
-        applyUserLocationToFilter(pos.lng, pos.lat)
-        const entry: CachedLocation = { asked: true, granted: true, lng: pos.lng, lat: pos.lat, ts: Date.now() }
-        localStorage.setItem(locationKey(), JSON.stringify(entry))
+        const pos = await getCurrentPosition();
+        userCenter.value = [pos.lng, pos.lat];
+        applyUserLocationToFilter(pos.lng, pos.lat);
+        const entry: CachedLocation = {
+            asked: true,
+            granted: true,
+            lng: pos.lng,
+            lat: pos.lat,
+            ts: Date.now(),
+        };
+        localStorage.setItem(locationKey(), JSON.stringify(entry));
     } catch {
-        const entry: CachedLocation = { asked: true, granted: false, ts: Date.now() }
-        try { localStorage.setItem(locationKey(), JSON.stringify(entry)) } catch { /* ignore */ }
+        const entry: CachedLocation = { asked: true, granted: false, ts: Date.now() };
+        try {
+            localStorage.setItem(locationKey(), JSON.stringify(entry));
+        } catch {
+            /* ignore */
+        }
     }
-})
+});
 
 // Mobile tab state
-type MobileTab = 'list' | 'map' | 'filters'
-const mobileTab = ref<MobileTab>('list')
+type MobileTab = 'list' | 'map' | 'filters';
+const mobileTab = ref<MobileTab>('list');
 
 function selectMobileTab(tab: MobileTab) {
-    mobileTab.value = tab
+    mobileTab.value = tab;
     // Tapping a tab is a "go back to browsing" gesture: clear any selected
     // sale so the list tab shows the full filtered list and the map tab
     // shows all the filtered pins without the stacked detail card.
-    clearSelection()
+    clearSelection();
 }
 
 const activeCount = computed(
     () => filteredSales.value.filter((s) => saleStatus(s) === 'active').length,
-)
+);
 const upcomingCount = computed(
     () => filteredSales.value.filter((s) => saleStatus(s) === 'upcoming').length,
-)
+);
 </script>
 
 <template>
@@ -233,20 +242,21 @@ const upcomingCount = computed(
                 </p>
                 <p class="mt-1">
                     Tap <strong>"Let's go!"</strong> on any sale to save it for later, or
-                    <NuxtLink
-                        to="/post"
-                        class="font-semibold text-brand-600 hover:underline"
-                    >
+                    <NuxtLink to="/post" class="font-semibold text-brand-600 hover:underline">
                         post your own
                     </NuxtLink>
                     .
                 </p>
                 <p class="mt-1.5">
-                    This app is still evolving — if you'd like a feature added or run into a
-                    bug, <span class="whitespace-nowrap"><a
-                        href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
-                        class="font-semibold text-sky-700 hover:underline"
-                    >reach out</a>.</span> I'd love to hear from you.
+                    This app is still evolving — if you'd like a feature added or run into a bug,
+                    <span class="whitespace-nowrap"
+                        ><a
+                            href="mailto:missap1214@gmail.com?subject=Garage%20Sale%20Tracker"
+                            class="font-semibold text-sky-700 hover:underline"
+                            >reach out</a
+                        >.</span
+                    >
+                    I'd love to hear from you.
                 </p>
             </div>
             <button
@@ -282,7 +292,7 @@ const upcomingCount = computed(
         <!-- Mobile tab nav -->
         <nav class="mb-3 flex rounded-lg bg-white p-1 ring-1 ring-orange-100 lg:hidden">
             <button
-                v-for="tab in (['list', 'map', 'filters'] as MobileTab[])"
+                v-for="tab in ['list', 'map', 'filters'] as MobileTab[]"
                 :key="tab"
                 class="flex-1 rounded-md px-3 py-2 text-sm font-medium capitalize transition"
                 :class="
@@ -297,9 +307,7 @@ const upcomingCount = computed(
         </nav>
 
         <!-- 3-column desktop / single-pane mobile -->
-        <div
-            class="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,380px)_minmax(0,1fr)]"
-        >
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,380px)_minmax(0,1fr)]">
             <!-- LEFT: Filters -->
             <aside :class="{ 'hidden lg:block': mobileTab !== 'filters' }">
                 <BrowseFilters
@@ -339,7 +347,10 @@ const upcomingCount = computed(
                         </template>
                         <template v-else>
                             <p>No garage sales posted in your area yet.</p>
-                            <NuxtLink to="/post" class="mt-1 inline-block text-sky-700 hover:underline">
+                            <NuxtLink
+                                to="/post"
+                                class="mt-1 inline-block text-sky-700 hover:underline"
+                            >
                                 Be the first — post a sale
                             </NuxtLink>
                         </template>
@@ -401,10 +412,7 @@ const upcomingCount = computed(
             </div>
         </div>
 
-        <p
-            v-if="sales && sales.length === 0"
-            class="mt-4 text-center text-gray-600"
-        >
+        <p v-if="sales && sales.length === 0" class="mt-4 text-center text-gray-600">
             No garage sales posted yet. Be the first —
             <NuxtLink to="/post" class="text-sky-700 hover:underline">post a sale</NuxtLink>.
         </p>

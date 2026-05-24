@@ -5,43 +5,43 @@
  * `/share/[id]` build these links — keep the cap in one place so a
  * Google policy change is a one-line edit.
  */
-export const GOOGLE_MAX_WAYPOINTS = 9
+export const GOOGLE_MAX_WAYPOINTS = 9;
 
-export type EndMode = 'round_trip' | 'last_stop' | 'address'
+export type EndMode = 'round_trip' | 'last_stop' | 'address';
 
 export interface RouteEnd {
-    mode: EndMode
+    mode: EndMode;
     /** Required when mode === 'address'. */
-    coord?: { lng: number; lat: number }
+    coord?: { lng: number; lat: number };
 }
 
 export interface OptimizedLeg {
-    distanceMeters: number
-    durationSeconds: number
+    distanceMeters: number;
+    durationSeconds: number;
 }
 
 export interface OptimizedRoute {
     /** Order to visit the input stops, expressed as input indices (excludes the start point). */
-    stopOrder: number[]
+    stopOrder: number[];
     /** GeoJSON LineString of the driving route. */
-    geometry: GeoJSON.LineString
+    geometry: GeoJSON.LineString;
     /** Total distance in meters. */
-    distanceMeters: number
+    distanceMeters: number;
     /** Total duration in seconds. */
-    durationSeconds: number
+    durationSeconds: number;
     /**
      * Per-leg drive segments in optimized order.
      * legs[0] = start → first stop, legs[1] = first stop → second stop, …
      * For a round-trip optimize or a custom-end optimize, the final entry
      * is the trailing leg (separated from `stopLegs` for convenience).
      */
-    legs: OptimizedLeg[]
+    legs: OptimizedLeg[];
     /** Just the legs that lead INTO each stop (excludes the return/end leg). */
-    stopLegs: OptimizedLeg[]
+    stopLegs: OptimizedLeg[];
     /** Drive time + distance back to the start. Non-null iff end.mode === 'round_trip'. */
-    returnLeg: OptimizedLeg | null
+    returnLeg: OptimizedLeg | null;
     /** Drive time + distance to a custom end address. Non-null iff end.mode === 'address'. */
-    endLeg: OptimizedLeg | null
+    endLeg: OptimizedLeg | null;
 }
 
 /**
@@ -66,53 +66,51 @@ export async function optimizeRoute(
     stops: { lng: number; lat: number }[],
     end: RouteEnd = { mode: 'round_trip' },
 ): Promise<OptimizedRoute> {
-    if (stops.length === 0) throw new Error('Need at least one stop to optimize')
+    if (stops.length === 0) throw new Error('Need at least one stop to optimize');
     if (end.mode === 'address' && !end.coord) {
-        throw new Error("End mode 'address' requires a coord")
+        throw new Error("End mode 'address' requires a coord");
     }
 
-    const extraEndCoord = end.mode === 'address' ? 1 : 0
-    const totalCoords = 1 + stops.length + extraEndCoord
+    const extraEndCoord = end.mode === 'address' ? 1 : 0;
+    const totalCoords = 1 + stops.length + extraEndCoord;
     if (totalCoords > 12) {
-        const cap = end.mode === 'address' ? 10 : 11
+        const cap = end.mode === 'address' ? 10 : 11;
         throw new Error(
             `Mapbox Optimization API supports up to ${cap} stops with the chosen end option.`,
-        )
+        );
     }
 
-    const config = useRuntimeConfig()
-    const token = config.public.mapboxToken as string
+    const config = useRuntimeConfig();
+    const token = config.public.mapboxToken as string;
 
-    const coordList = end.mode === 'address'
-        ? [start, ...stops, end.coord!]
-        : [start, ...stops]
-    const coordStr = coordList.map((c) => `${c.lng},${c.lat}`).join(';')
+    const coordList = end.mode === 'address' ? [start, ...stops, end.coord!] : [start, ...stops];
+    const coordStr = coordList.map((c) => `${c.lng},${c.lat}`).join(';');
 
-    const url = new URL(`https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordStr}`)
-    url.searchParams.set('source', 'first')
+    const url = new URL(`https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordStr}`);
+    url.searchParams.set('source', 'first');
     if (end.mode === 'round_trip') {
-        url.searchParams.set('roundtrip', 'true')
+        url.searchParams.set('roundtrip', 'true');
     } else {
         // Open trip: pin the endpoint to the last coord (either the user's
         // last stop or the appended end address), optimize the middle.
-        url.searchParams.set('destination', 'last')
-        url.searchParams.set('roundtrip', 'false')
+        url.searchParams.set('destination', 'last');
+        url.searchParams.set('roundtrip', 'false');
     }
-    url.searchParams.set('geometries', 'geojson')
-    url.searchParams.set('overview', 'full')
-    url.searchParams.set('steps', 'false')
-    url.searchParams.set('access_token', token)
+    url.searchParams.set('geometries', 'geojson');
+    url.searchParams.set('overview', 'full');
+    url.searchParams.set('steps', 'false');
+    url.searchParams.set('access_token', token);
 
-    const requestUrl = url.toString()
+    const requestUrl = url.toString();
     // Strip the access_token before logging — anything that ends up in
     // a console / log forwarder shouldn't carry the live Mapbox token.
-    const safeUrl = requestUrl.replace(/([?&])access_token=[^&]*/, '$1access_token=REDACTED')
-    const res = await fetch(requestUrl)
-    const json = await res.json().catch(() => null)
+    const safeUrl = requestUrl.replace(/([?&])access_token=[^&]*/, '$1access_token=REDACTED');
+    const res = await fetch(requestUrl);
+    const json = await res.json().catch(() => null);
     if (!res.ok) {
-        const msg = json?.message || json?.code || res.statusText || `HTTP ${res.status}`
-        console.error('[optimizeRoute] HTTP error', res.status, json, '\nRequest URL:', safeUrl)
-        throw new Error(`Mapbox optimization failed: ${msg}`)
+        const msg = json?.message || json?.code || res.statusText || `HTTP ${res.status}`;
+        console.error('[optimizeRoute] HTTP error', res.status, json, '\nRequest URL:', safeUrl);
+        throw new Error(`Mapbox optimization failed: ${msg}`);
     }
     if (!json || (json.code && json.code !== 'Ok')) {
         console.error(
@@ -120,55 +118,53 @@ export async function optimizeRoute(
             json,
             '\nrequest URL:',
             safeUrl,
-        )
-        const code = json?.code || 'Unknown'
-        const message = json?.message || ''
+        );
+        const code = json?.code || 'Unknown';
+        const message = json?.message || '';
         const friendly =
             code === 'NoRoute'
                 ? "Couldn't build a driving route between those points. One of the stops (or your start point) may be too far from a road. Try a different start address."
-                : `Mapbox: ${code}${message ? ' — ' + message : ''}`
-        throw new Error(friendly)
+                : `Mapbox: ${code}${message ? ' — ' + message : ''}`;
+        throw new Error(friendly);
     }
-    const trip = json.trips?.[0]
-    if (!trip) throw new Error('No route returned (empty trips)')
+    const trip = json.trips?.[0];
+    if (!trip) throw new Error('No route returned (empty trips)');
 
-    const waypoints = json.waypoints as Array<{ waypoint_index: number }>
-    const orderToInputIdx = new Array<number>(waypoints.length)
+    const waypoints = json.waypoints as Array<{ waypoint_index: number }>;
+    const orderToInputIdx = new Array<number>(waypoints.length);
     waypoints.forEach((w, inputIdx) => {
-        orderToInputIdx[w.waypoint_index] = inputIdx
-    })
+        orderToInputIdx[w.waypoint_index] = inputIdx;
+    });
     // For address mode the input list is [start, ...stops, end] so we want
     // the slice that covers the stops only. For other modes the array is
     // already exactly [start, ...stops], so `slice(1, 1 + stops.length)`
     // reduces to `slice(1)` and the semantics are identical.
-    const stopOrder = orderToInputIdx
-        .slice(1, 1 + stops.length)
-        .map((inputIdx) => inputIdx - 1)
+    const stopOrder = orderToInputIdx.slice(1, 1 + stops.length).map((inputIdx) => inputIdx - 1);
 
     const legs: OptimizedLeg[] = (trip.legs ?? []).map(
         (l: { distance: number; duration: number }) => ({
             distanceMeters: l.distance,
             durationSeconds: l.duration,
         }),
-    )
+    );
 
     // Split the trailing leg (return-home or drive-to-end) off from the
     // stop legs so the timeline can render it separately.
-    let stopLegs: OptimizedLeg[]
-    let returnLeg: OptimizedLeg | null
-    let endLeg: OptimizedLeg | null
+    let stopLegs: OptimizedLeg[];
+    let returnLeg: OptimizedLeg | null;
+    let endLeg: OptimizedLeg | null;
     if (end.mode === 'round_trip') {
-        stopLegs = legs.slice(0, stops.length)
-        returnLeg = legs[stops.length] ?? null
-        endLeg = null
+        stopLegs = legs.slice(0, stops.length);
+        returnLeg = legs[stops.length] ?? null;
+        endLeg = null;
     } else if (end.mode === 'address') {
-        stopLegs = legs.slice(0, stops.length)
-        returnLeg = null
-        endLeg = legs[stops.length] ?? null
+        stopLegs = legs.slice(0, stops.length);
+        returnLeg = null;
+        endLeg = legs[stops.length] ?? null;
     } else {
-        stopLegs = legs
-        returnLeg = null
-        endLeg = null
+        stopLegs = legs;
+        returnLeg = null;
+        endLeg = null;
     }
 
     return {
@@ -180,7 +176,7 @@ export async function optimizeRoute(
         stopLegs,
         returnLeg,
         endLeg,
-    }
+    };
 }
 
 /**
@@ -199,71 +195,73 @@ export async function buildRouteFromOrder(
     stops: { lng: number; lat: number }[],
     end: RouteEnd = { mode: 'last_stop' },
 ): Promise<OptimizedRoute> {
-    if (stops.length === 0) throw new Error('Need at least one stop to route')
+    if (stops.length === 0) throw new Error('Need at least one stop to route');
     if (end.mode === 'address' && !end.coord) {
-        throw new Error("End mode 'address' requires a coord")
+        throw new Error("End mode 'address' requires a coord");
     }
 
-    const extraCoord = end.mode === 'round_trip' || end.mode === 'address' ? 1 : 0
-    const totalCoords = 1 + stops.length + extraCoord
+    const extraCoord = end.mode === 'round_trip' || end.mode === 'address' ? 1 : 0;
+    const totalCoords = 1 + stops.length + extraCoord;
     if (totalCoords > 25) {
-        const cap = end.mode === 'last_stop' ? 24 : 23
-        throw new Error(`Directions API supports up to ${cap} stops with the chosen end option.`)
+        const cap = end.mode === 'last_stop' ? 24 : 23;
+        throw new Error(`Directions API supports up to ${cap} stops with the chosen end option.`);
     }
 
-    const config = useRuntimeConfig()
-    const token = config.public.mapboxToken as string
+    const config = useRuntimeConfig();
+    const token = config.public.mapboxToken as string;
 
-    const coordList = [start, ...stops]
-    if (end.mode === 'round_trip') coordList.push(start)
-    else if (end.mode === 'address') coordList.push(end.coord!)
-    const coords = coordList.map((c) => `${c.lng},${c.lat}`).join(';')
-    const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${coords}`)
-    url.searchParams.set('geometries', 'geojson')
-    url.searchParams.set('overview', 'full')
-    url.searchParams.set('steps', 'false')
-    url.searchParams.set('access_token', token)
+    const coordList = [start, ...stops];
+    if (end.mode === 'round_trip') coordList.push(start);
+    else if (end.mode === 'address') coordList.push(end.coord!);
+    const coords = coordList.map((c) => `${c.lng},${c.lat}`).join(';');
+    const url = new URL(`https://api.mapbox.com/directions/v5/mapbox/driving/${coords}`);
+    url.searchParams.set('geometries', 'geojson');
+    url.searchParams.set('overview', 'full');
+    url.searchParams.set('steps', 'false');
+    url.searchParams.set('access_token', token);
 
-    const res = await fetch(url.toString())
-    const json = await res.json().catch(() => null)
+    const res = await fetch(url.toString());
+    const json = await res.json().catch(() => null);
     if (!res.ok) {
-        const msg = json?.message || json?.code || res.statusText || `HTTP ${res.status}`
-        console.error('[buildRouteFromOrder] HTTP error', res.status, json)
-        throw new Error(`Mapbox directions failed: ${msg}`)
+        const msg = json?.message || json?.code || res.statusText || `HTTP ${res.status}`;
+        console.error('[buildRouteFromOrder] HTTP error', res.status, json);
+        throw new Error(`Mapbox directions failed: ${msg}`);
     }
     if (!json || (json.code && json.code !== 'Ok')) {
-        console.error('[buildRouteFromOrder] non-Ok', json)
-        const code = json?.code || 'Unknown'
+        console.error('[buildRouteFromOrder] non-Ok', json);
+        const code = json?.code || 'Unknown';
         const friendly =
             code === 'NoRoute'
                 ? "Couldn't build a driving route between those points. One of the stops or the start may be too far from a road."
-                : `${code}${json?.message ? ' — ' + json.message : ''}`
-        throw new Error(friendly)
+                : `${code}${json?.message ? ' — ' + json.message : ''}`;
+        throw new Error(friendly);
     }
 
-    const route = json.routes?.[0]
-    if (!route) throw new Error('No route returned')
+    const route = json.routes?.[0];
+    if (!route) throw new Error('No route returned');
 
-    const legs: OptimizedLeg[] = (route.legs ?? []).map((l: { distance: number; duration: number }) => ({
-        distanceMeters: l.distance,
-        durationSeconds: l.duration,
-    }))
+    const legs: OptimizedLeg[] = (route.legs ?? []).map(
+        (l: { distance: number; duration: number }) => ({
+            distanceMeters: l.distance,
+            durationSeconds: l.duration,
+        }),
+    );
 
-    let stopLegs: OptimizedLeg[]
-    let returnLeg: OptimizedLeg | null
-    let endLeg: OptimizedLeg | null
+    let stopLegs: OptimizedLeg[];
+    let returnLeg: OptimizedLeg | null;
+    let endLeg: OptimizedLeg | null;
     if (end.mode === 'round_trip') {
-        stopLegs = legs.slice(0, stops.length)
-        returnLeg = legs[stops.length] ?? null
-        endLeg = null
+        stopLegs = legs.slice(0, stops.length);
+        returnLeg = legs[stops.length] ?? null;
+        endLeg = null;
     } else if (end.mode === 'address') {
-        stopLegs = legs.slice(0, stops.length)
-        returnLeg = null
-        endLeg = legs[stops.length] ?? null
+        stopLegs = legs.slice(0, stops.length);
+        returnLeg = null;
+        endLeg = legs[stops.length] ?? null;
     } else {
-        stopLegs = legs
-        returnLeg = null
-        endLeg = null
+        stopLegs = legs;
+        returnLeg = null;
+        endLeg = null;
     }
 
     return {
@@ -276,29 +274,29 @@ export async function buildRouteFromOrder(
         stopLegs,
         returnLeg,
         endLeg,
-    }
+    };
 }
 
 export function getCurrentPosition(): Promise<{ lng: number; lat: number }> {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
-            reject(new Error('Geolocation not supported in this browser.'))
-            return
+            reject(new Error('Geolocation not supported in this browser.'));
+            return;
         }
         navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lng: pos.coords.longitude, lat: pos.coords.latitude }),
             (err) => reject(new Error(err.message || 'Location permission denied.')),
             { enableHighAccuracy: true, timeout: 10000 },
-        )
-    })
+        );
+    });
 }
 
 export interface TimelineEntry {
     /** Stop index in the optimized order (0-based). */
-    visitOrder: number
-    arriveAt: Date
-    departAt: Date
-    drivingSecondsFromPrev: number
+    visitOrder: number;
+    arriveAt: Date;
+    departAt: Date;
+    drivingSecondsFromPrev: number;
 }
 
 /**
@@ -311,19 +309,19 @@ export function buildTimeline(
     start: Date = new Date(),
     dwellMinutes = 30,
 ): TimelineEntry[] {
-    const entries: TimelineEntry[] = []
-    let cursor = start.getTime()
+    const entries: TimelineEntry[] = [];
+    let cursor = start.getTime();
     for (let i = 0; i < legs.length; i++) {
-        const driveMs = legs[i].durationSeconds * 1000
-        const arriveAt = new Date(cursor + driveMs)
-        const departAt = new Date(arriveAt.getTime() + dwellMinutes * 60 * 1000)
+        const driveMs = legs[i].durationSeconds * 1000;
+        const arriveAt = new Date(cursor + driveMs);
+        const departAt = new Date(arriveAt.getTime() + dwellMinutes * 60 * 1000);
         entries.push({
             visitOrder: i,
             arriveAt,
             departAt,
             drivingSecondsFromPrev: legs[i].durationSeconds,
-        })
-        cursor = departAt.getTime()
+        });
+        cursor = departAt.getTime();
     }
-    return entries
+    return entries;
 }

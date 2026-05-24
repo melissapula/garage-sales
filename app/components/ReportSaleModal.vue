@@ -1,13 +1,13 @@
 <script setup lang="ts">
 const props = defineProps<{
-    open: boolean
-    saleId: string
-}>()
+    open: boolean;
+    saleId: string;
+}>();
 
 const emit = defineEmits<{
-    (e: 'update:open', v: boolean): void
-    (e: 'submitted'): void
-}>()
+    (e: 'update:open', v: boolean): void;
+    (e: 'submitted'): void;
+}>();
 
 const REASONS = [
     { value: 'false_info', label: 'False or misleading info' },
@@ -15,62 +15,62 @@ const REASONS = [
     { value: 'inappropriate', label: 'Inappropriate content' },
     { value: 'duplicate', label: 'Duplicate of another sale' },
     { value: 'other', label: 'Other' },
-] as const
+] as const;
 
-type Reason = typeof REASONS[number]['value']
+type Reason = (typeof REASONS)[number]['value'];
 
-const reason = ref<Reason | ''>('')
-const notes = ref('')
-const submitting = ref(false)
-const error = ref<string | null>(null)
+const reason = ref<Reason | ''>('');
+const notes = ref('');
+const submitting = ref(false);
+const error = ref<string | null>(null);
 
-const dialogEl = ref<HTMLElement | null>(null)
-const isOpen = computed(() => props.open)
+const dialogEl = ref<HTMLElement | null>(null);
+const isOpen = computed(() => props.open);
 
-useFocusTrap(dialogEl, isOpen)
+useFocusTrap(dialogEl, isOpen);
 
 function close() {
-    emit('update:open', false)
+    emit('update:open', false);
 }
 
 // Reset form fields whenever the modal opens — otherwise a previous
 // submission's reason/notes would still be sitting there.
 watch(isOpen, (open) => {
     if (open) {
-        reason.value = ''
-        notes.value = ''
-        error.value = null
-        submitting.value = false
+        reason.value = '';
+        notes.value = '';
+        error.value = null;
+        submitting.value = false;
     }
-})
+});
 
 function onKeydown(ev: KeyboardEvent) {
-    if (!props.open) return
-    if (ev.key === 'Escape') close()
+    if (!props.open) return;
+    if (ev.key === 'Escape') close();
 }
 
 watch(isOpen, (open) => {
-    if (typeof document === 'undefined') return
+    if (typeof document === 'undefined') return;
     if (open) {
-        document.body.style.overflow = 'hidden'
-        document.addEventListener('keydown', onKeydown)
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', onKeydown);
     } else {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
 onBeforeUnmount(() => {
     if (typeof document !== 'undefined') {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
 async function submit() {
-    if (!reason.value || submitting.value) return
-    submitting.value = true
-    error.value = null
+    if (!reason.value || submitting.value) return;
+    submitting.value = true;
+    error.value = null;
     try {
         await $fetch('/api/sale-reports', {
             method: 'POST',
@@ -79,19 +79,22 @@ async function submit() {
                 reason: reason.value,
                 notes: notes.value.trim() || undefined,
             },
-        })
-        emit('submitted')
-        close()
+        });
+        emit('submitted');
+        close();
     } catch (e: unknown) {
         const msg =
-            e && typeof e === 'object' && 'data' in e && (e as { data: { statusMessage?: string } }).data?.statusMessage
+            e &&
+            typeof e === 'object' &&
+            'data' in e &&
+            (e as { data: { statusMessage?: string } }).data?.statusMessage
                 ? (e as { data: { statusMessage: string } }).data.statusMessage
                 : e instanceof Error
                   ? e.message
-                  : 'Could not submit report'
-        error.value = msg
+                  : 'Could not submit report';
+        error.value = msg;
     } finally {
-        submitting.value = false
+        submitting.value = false;
     }
 }
 </script>
@@ -114,8 +117,8 @@ async function submit() {
                     Report this sale
                 </h3>
                 <p class="mt-1 text-sm text-gray-600">
-                    Flag this listing for our review. We read every report and act on
-                    confirmed violations.
+                    Flag this listing for our review. We read every report and act on confirmed
+                    violations.
                 </p>
 
                 <div class="mt-4">
@@ -150,10 +153,7 @@ async function submit() {
                     />
                 </div>
 
-                <p
-                    v-if="error"
-                    class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-                >
+                <p v-if="error" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                     {{ error }}
                 </p>
 

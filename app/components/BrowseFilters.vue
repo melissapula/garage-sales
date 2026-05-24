@@ -1,22 +1,18 @@
 <script setup lang="ts">
-import type { GarageSale } from '~/composables/useGarageSales'
-import {
-    type BrowseFiltersValue,
-    type FilterLocation,
-    emptyFilters,
-} from '~/utils/filters'
+import type { GarageSale } from '~/composables/useGarageSales';
+import { type BrowseFiltersValue, type FilterLocation, emptyFilters } from '~/utils/filters';
 
 const props = defineProps<{
-    sales: GarageSale[]
-    modelValue: BrowseFiltersValue
+    sales: GarageSale[];
+    modelValue: BrowseFiltersValue;
     /** Sales matching the current filters — passed in so the header can
      *  show a live count. Single source of truth lives in the parent. */
-    filteredCount: number
-}>()
+    filteredCount: number;
+}>();
 
 const emit = defineEmits<{
-    (e: 'update:modelValue', v: BrowseFiltersValue): void
-}>()
+    (e: 'update:modelValue', v: BrowseFiltersValue): void;
+}>();
 
 // =============================================================================
 // Date-range filter
@@ -25,52 +21,52 @@ function setDateStart(iso: string | null) {
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { ...props.modelValue.dateRange, start: iso },
-    })
+    });
 }
 
 function setDateEnd(iso: string | null) {
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { ...props.modelValue.dateRange, end: iso },
-    })
+    });
 }
 
 function clearDateRange() {
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { start: null, end: null },
-    })
+    });
 }
 
 // Quick presets — the picker handles arbitrary ranges, but the most
 // common queries ("today", "this weekend") are worth one tap.
 function applyPresetToday() {
-    const today = todayLocalISO()
+    const today = todayLocalISO();
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { start: today, end: today },
-    })
+    });
 }
 
 function applyPresetThisWeekend() {
     // "This weekend" = the upcoming Saturday + Sunday, OR today + tomorrow
     // when today is Saturday or Sunday. Past code had empty Sun/Sat
     // branches that worked by accident — this version is explicit.
-    const now = new Date()
-    const dow = now.getDay() // 0 Sun, 6 Sat
-    const start = new Date(now)
+    const now = new Date();
+    const dow = now.getDay(); // 0 Sun, 6 Sat
+    const start = new Date(now);
     // Mon–Fri (1..5): jump forward to the upcoming Saturday.
     // Sat (6) + Sun (0): start on today.
     if (dow >= 1 && dow <= 5) {
-        start.setDate(now.getDate() + (6 - dow))
+        start.setDate(now.getDate() + (6 - dow));
     }
-    const end = new Date(start)
+    const end = new Date(start);
     // If start is Saturday, extend to Sunday. If start is Sunday, single day.
-    if (start.getDay() === 6) end.setDate(start.getDate() + 1)
+    if (start.getDay() === 6) end.setDate(start.getDate() + 1);
     emit('update:modelValue', {
         ...props.modelValue,
         dateRange: { start: toLocalISO(start), end: toLocalISO(end) },
-    })
+    });
 }
 
 // =============================================================================
@@ -80,61 +76,61 @@ const TIME_BUCKETS = [
     { id: 'morning' as const, label: 'Morning', sub: 'before noon' },
     { id: 'afternoon' as const, label: 'Afternoon', sub: 'noon – 5pm' },
     { id: 'evening' as const, label: 'Evening', sub: '5pm onward' },
-]
+];
 
 function toggleBucket(b: 'morning' | 'afternoon' | 'evening') {
     const next = props.modelValue.timeBuckets.includes(b)
         ? props.modelValue.timeBuckets.filter((x) => x !== b)
-        : [...props.modelValue.timeBuckets, b]
-    emit('update:modelValue', { ...props.modelValue, timeBuckets: next })
+        : [...props.modelValue.timeBuckets, b];
+    emit('update:modelValue', { ...props.modelValue, timeBuckets: next });
 }
 
 // =============================================================================
 // Location filter
 // =============================================================================
-const locationInput = ref('')
-const findingLocation = ref(false)
-const locationError = ref<string | null>(null)
+const locationInput = ref('');
+const findingLocation = ref(false);
+const locationError = ref<string | null>(null);
 
 async function useMyLocation() {
-    locationError.value = null
-    findingLocation.value = true
+    locationError.value = null;
+    findingLocation.value = true;
     try {
-        const pos = await getCurrentPosition()
-        const label = (await reverseGeocode(pos.lng, pos.lat)) ?? 'Your location'
-        setLocation({ lat: pos.lat, lng: pos.lng, label })
+        const pos = await getCurrentPosition();
+        const label = (await reverseGeocode(pos.lng, pos.lat)) ?? 'Your location';
+        setLocation({ lat: pos.lat, lng: pos.lng, label });
     } catch (e) {
-        locationError.value = e instanceof Error ? e.message : 'Could not get location'
+        locationError.value = e instanceof Error ? e.message : 'Could not get location';
     } finally {
-        findingLocation.value = false
+        findingLocation.value = false;
     }
 }
 
 async function searchLocation() {
-    locationError.value = null
-    if (!locationInput.value.trim()) return
-    findingLocation.value = true
+    locationError.value = null;
+    if (!locationInput.value.trim()) return;
+    findingLocation.value = true;
     try {
-        const result = await geocodeAddress(locationInput.value.trim())
+        const result = await geocodeAddress(locationInput.value.trim());
         if (!result) {
-            locationError.value = "Couldn't find that location."
-            return
+            locationError.value = "Couldn't find that location.";
+            return;
         }
-        setLocation({ lat: result.lat, lng: result.lng, label: result.address })
-        locationInput.value = ''
+        setLocation({ lat: result.lat, lng: result.lng, label: result.address });
+        locationInput.value = '';
     } catch (e) {
-        locationError.value = e instanceof Error ? e.message : 'Search failed'
+        locationError.value = e instanceof Error ? e.message : 'Search failed';
     } finally {
-        findingLocation.value = false
+        findingLocation.value = false;
     }
 }
 
 function setLocation(location: FilterLocation) {
-    emit('update:modelValue', { ...props.modelValue, location })
+    emit('update:modelValue', { ...props.modelValue, location });
 }
 
 function clearLocation() {
-    emit('update:modelValue', { ...props.modelValue, location: null })
+    emit('update:modelValue', { ...props.modelValue, location: null });
 }
 
 // Radius slider uses a local ref for the visual value so the thumb
@@ -143,22 +139,25 @@ function clearLocation() {
 // pixel of drag. Each native `input` event would otherwise rerun
 // applyFilters across all sales, the BrowseMap signature watcher,
 // and the cards list — visible as a Poor INP score in production.
-const localRadius = ref(props.modelValue.radiusMiles)
-watch(() => props.modelValue.radiusMiles, (next) => {
-    if (next !== localRadius.value) localRadius.value = next
-})
+const localRadius = ref(props.modelValue.radiusMiles);
+watch(
+    () => props.modelValue.radiusMiles,
+    (next) => {
+        if (next !== localRadius.value) localRadius.value = next;
+    },
+);
 const debouncedEmitRadius = useDebounceFn((miles: number) => {
     // Guard against a stale queued value: if the user clicked "Clear
     // all" (which resets the parent and re-syncs localRadius via the
     // watcher above) between the drag and the debounce firing, the
     // queued `miles` would race-undo the reset. Only emit if it still
     // matches the current intent.
-    if (miles !== localRadius.value) return
-    emit('update:modelValue', { ...props.modelValue, radiusMiles: miles })
-}, 120)
+    if (miles !== localRadius.value) return;
+    emit('update:modelValue', { ...props.modelValue, radiusMiles: miles });
+}, 120);
 function setRadius(miles: number) {
-    localRadius.value = miles
-    debouncedEmitRadius(miles)
+    localRadius.value = miles;
+    debouncedEmitRadius(miles);
 }
 
 // =============================================================================
@@ -170,10 +169,10 @@ const hasFilters = computed(
         props.modelValue.dateRange.end !== null ||
         props.modelValue.timeBuckets.length > 0 ||
         props.modelValue.location !== null,
-)
+);
 
 function clearAll() {
-    emit('update:modelValue', emptyFilters())
+    emit('update:modelValue', emptyFilters());
 }
 </script>
 
@@ -250,9 +249,7 @@ function clearAll() {
             <div class="mt-3">
                 <div class="mb-1.5 flex items-baseline justify-between text-xs text-gray-600">
                     <span>Within</span>
-                    <span class="font-semibold text-gray-900">
-                        {{ localRadius }} mi
-                    </span>
+                    <span class="font-semibold text-gray-900"> {{ localRadius }} mi </span>
                 </div>
                 <input
                     type="range"
@@ -264,8 +261,8 @@ function clearAll() {
                     :disabled="!modelValue.location"
                     @input="
                         (() => {
-                            const v = Number(($event.target as HTMLInputElement).value)
-                            if (Number.isFinite(v)) setRadius(v)
+                            const v = Number(($event.target as HTMLInputElement).value);
+                            if (Number.isFinite(v)) setRadius(v);
                         })()
                     "
                 />
@@ -273,10 +270,7 @@ function clearAll() {
                     <span>5 mi</span>
                     <span>100 mi</span>
                 </div>
-                <p
-                    v-if="!modelValue.location"
-                    class="mt-1 text-xs text-gray-400"
-                >
+                <p v-if="!modelValue.location" class="mt-1 text-xs text-gray-400">
                     Set a location first.
                 </p>
             </div>
@@ -285,9 +279,7 @@ function clearAll() {
         <!-- Dates -->
         <div>
             <div class="mb-2 flex items-center justify-between">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Dates
-                </h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Dates</h3>
                 <button
                     v-if="modelValue.dateRange.start || modelValue.dateRange.end"
                     type="button"
@@ -322,11 +314,7 @@ function clearAll() {
                         type="date"
                         class="input flex-1 !min-h-[40px] !text-sm"
                         :value="modelValue.dateRange.start ?? ''"
-                        @input="
-                            setDateStart(
-                                ($event.target as HTMLInputElement).value || null,
-                            )
-                        "
+                        @input="setDateStart(($event.target as HTMLInputElement).value || null)"
                     />
                 </label>
                 <label class="flex items-center gap-2 text-sm">
@@ -336,18 +324,12 @@ function clearAll() {
                         class="input flex-1 !min-h-[40px] !text-sm"
                         :min="modelValue.dateRange.start ?? undefined"
                         :value="modelValue.dateRange.end ?? ''"
-                        @input="
-                            setDateEnd(
-                                ($event.target as HTMLInputElement).value || null,
-                            )
-                        "
+                        @input="setDateEnd(($event.target as HTMLInputElement).value || null)"
                     />
                 </label>
             </div>
 
-            <p class="mt-2 text-xs text-gray-500">
-                Leave a side blank for an open-ended range.
-            </p>
+            <p class="mt-2 text-xs text-gray-500">Leave a side blank for an open-ended range.</p>
         </div>
 
         <!-- Time -->

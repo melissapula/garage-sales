@@ -1,85 +1,85 @@
 <script setup lang="ts">
 const props = defineProps<{
-    photos: string[]
+    photos: string[];
     /** null = closed; number = currently-shown photo index. */
-    open: number | null
-}>()
+    open: number | null;
+}>();
 
 const emit = defineEmits<{
-    (e: 'update:open', index: number | null): void
-}>()
+    (e: 'update:open', index: number | null): void;
+}>();
 
 const index = computed({
     get: () => props.open,
     set: (v) => emit('update:open', v),
-})
+});
 
-const isOpen = computed(() => index.value !== null)
+const isOpen = computed(() => index.value !== null);
 
 function close() {
-    emit('update:open', null)
+    emit('update:open', null);
 }
 
 function next() {
-    if (index.value === null) return
-    index.value = (index.value + 1) % props.photos.length
+    if (index.value === null) return;
+    index.value = (index.value + 1) % props.photos.length;
 }
 
 function prev() {
-    if (index.value === null) return
-    index.value = (index.value - 1 + props.photos.length) % props.photos.length
+    if (index.value === null) return;
+    index.value = (index.value - 1 + props.photos.length) % props.photos.length;
 }
 
 function onKeydown(ev: KeyboardEvent) {
-    if (!isOpen.value) return
-    if (ev.key === 'Escape') close()
-    else if (ev.key === 'ArrowRight') next()
-    else if (ev.key === 'ArrowLeft') prev()
+    if (!isOpen.value) return;
+    if (ev.key === 'Escape') close();
+    else if (ev.key === 'ArrowRight') next();
+    else if (ev.key === 'ArrowLeft') prev();
 }
 
 // Touch swipe support (simple horizontal swipe).
-let touchStartX = 0
-let touchStartY = 0
+let touchStartX = 0;
+let touchStartY = 0;
 
 function onTouchStart(ev: TouchEvent) {
-    const t = ev.touches[0]
-    if (!t) return
-    touchStartX = t.clientX
-    touchStartY = t.clientY
+    const t = ev.touches[0];
+    if (!t) return;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
 }
 
 function onTouchEnd(ev: TouchEvent) {
-    const t = ev.changedTouches[0]
-    if (!t) return
-    const dx = t.clientX - touchStartX
-    const dy = t.clientY - touchStartY
+    const t = ev.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
     // Need a meaningful horizontal swipe (and mostly horizontal).
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-        if (dx < 0) next()
-        else prev()
+        if (dx < 0) next();
+        else prev();
     }
 }
 
 watch(isOpen, (v) => {
-    if (typeof document === 'undefined') return
+    if (typeof document === 'undefined') return;
     if (v) {
-        document.body.style.overflow = 'hidden'
-        document.addEventListener('keydown', onKeydown)
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', onKeydown);
     } else {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
 onBeforeUnmount(() => {
     if (typeof document !== 'undefined') {
-        document.body.style.overflow = ''
-        document.removeEventListener('keydown', onKeydown)
+        document.body.style.overflow = '';
+        document.removeEventListener('keydown', onKeydown);
     }
-})
+});
 
-const dialogEl = ref<HTMLElement | null>(null)
-useFocusTrap(dialogEl, isOpen)
+const dialogEl = ref<HTMLElement | null>(null);
+useFocusTrap(dialogEl, isOpen);
 </script>
 
 <template>

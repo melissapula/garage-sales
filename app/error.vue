@@ -7,27 +7,29 @@
  */
 const props = defineProps<{
     error: {
-        statusCode?: number
-        statusMessage?: string
-        message?: string
-    }
-}>()
+        statusCode?: number;
+        statusMessage?: string;
+        message?: string;
+    };
+}>();
 
-const isNotFound = computed(() => props.error?.statusCode === 404)
+const isNotFound = computed(() => props.error?.statusCode === 404);
 
-const heading = computed(() => (isNotFound.value ? "We couldn't find that page." : 'Something went wrong.'))
+const heading = computed(() =>
+    isNotFound.value ? "We couldn't find that page." : 'Something went wrong.',
+);
 const detail = computed(() =>
     isNotFound.value
         ? 'The link may be wrong, or the sale or route might have been removed.'
-        : props.error?.statusMessage ?? props.error?.message ?? 'An unexpected error occurred.',
-)
+        : (props.error?.statusMessage ?? props.error?.message ?? 'An unexpected error occurred.'),
+);
 
 function goHome() {
-    clearError({ redirect: '/' })
+    clearError({ redirect: '/' });
 }
 
 function goBrowse() {
-    clearError({ redirect: '/browse' })
+    clearError({ redirect: '/browse' });
 }
 </script>
 
@@ -53,9 +55,7 @@ function goBrowse() {
                     {{ detail }}
                 </p>
                 <div class="mt-8 flex flex-wrap justify-center gap-3">
-                    <button class="btn-primary" @click="goBrowse">
-                        Browse sales
-                    </button>
+                    <button class="btn-primary" @click="goBrowse">Browse sales</button>
                     <button
                         class="inline-flex min-h-[40px] items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                         @click="goHome"

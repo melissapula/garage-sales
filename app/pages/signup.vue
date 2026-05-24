@@ -1,56 +1,56 @@
 <script setup lang="ts">
-import VueHcaptcha from '@hcaptcha/vue3-hcaptcha'
+import VueHcaptcha from '@hcaptcha/vue3-hcaptcha';
 
-const supabase = useSupabaseClient()
-const config = useRuntimeConfig()
+const supabase = useSupabaseClient();
+const config = useRuntimeConfig();
 
-const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || ''
-const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0)
+const hcaptchaSiteKey = (config.public.hcaptchaSiteKey as string) || '';
+const captchaEnabled = computed(() => hcaptchaSiteKey.length > 0);
 
-const email = ref('')
-const displayName = ref('')
-const password = ref('')
-const passwordConfirm = ref('')
-const showPassword = ref(false)
-const captchaToken = ref<string | null>(null)
-const error = ref<string | null>(null)
-const alreadyExists = ref(false)
-const loading = ref(false)
-const sent = ref(false)
-const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null)
+const email = ref('');
+const displayName = ref('');
+const password = ref('');
+const passwordConfirm = ref('');
+const showPassword = ref(false);
+const captchaToken = ref<string | null>(null);
+const error = ref<string | null>(null);
+const alreadyExists = ref(false);
+const loading = ref(false);
+const sent = ref(false);
+const hcaptchaRef = ref<InstanceType<typeof VueHcaptcha> | null>(null);
 
-const passwordType = computed(() => (showPassword.value ? 'text' : 'password'))
-const passwordTooShort = computed(() => password.value.length > 0 && password.value.length < 8)
+const passwordType = computed(() => (showPassword.value ? 'text' : 'password'));
+const passwordTooShort = computed(() => password.value.length > 0 && password.value.length < 8);
 const passwordsMismatch = computed(
     () => passwordConfirm.value.length > 0 && password.value !== passwordConfirm.value,
-)
+);
 const canSubmit = computed(
     () =>
         email.value.length > 0 &&
         password.value.length >= 8 &&
         password.value === passwordConfirm.value &&
         (!captchaEnabled.value || captchaToken.value !== null),
-)
+);
 
 function onCaptchaVerify(token: string) {
-    captchaToken.value = token
+    captchaToken.value = token;
 }
 function onCaptchaExpired() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 function onCaptchaError() {
-    captchaToken.value = null
+    captchaToken.value = null;
 }
 
 async function submit() {
-    error.value = null
-    alreadyExists.value = false
-    if (!canSubmit.value) return
-    loading.value = true
+    error.value = null;
+    alreadyExists.value = false;
+    if (!canSubmit.value) return;
+    loading.value = true;
     // The handle_new_user trigger reads raw_user_meta_data.display_name
     // first and falls back to the email's local part if it's empty, so
     // we only attach the field when the user actually filled it in.
-    const trimmedDisplayName = displayName.value.trim()
+    const trimmedDisplayName = displayName.value.trim();
     const { data, error: err } = await supabase.auth.signUp({
         email: email.value,
         password: password.value,
@@ -59,22 +59,22 @@ async function submit() {
             ...(captchaToken.value ? { captchaToken: captchaToken.value } : {}),
             ...(trimmedDisplayName ? { data: { display_name: trimmedDisplayName } } : {}),
         },
-    })
-    loading.value = false
+    });
+    loading.value = false;
     // Reset captcha — tokens are single-use.
     if (captchaEnabled.value) {
-        captchaToken.value = null
-        hcaptchaRef.value?.reset()
+        captchaToken.value = null;
+        hcaptchaRef.value?.reset();
     }
     if (err) {
-        error.value = err.message
-        return
+        error.value = err.message;
+        return;
     }
     if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-        alreadyExists.value = true
-        return
+        alreadyExists.value = true;
+        return;
     }
-    sent.value = true
+    sent.value = true;
 }
 </script>
 
@@ -86,24 +86,19 @@ async function submit() {
         <div v-if="sent" class="mt-8 rounded-lg bg-green-50 p-4 text-green-800">
             <p class="font-medium">Check your email.</p>
             <p class="mt-1 text-sm">
-                We sent a confirmation link to <strong>{{ email }}</strong>.
+                We sent a confirmation link to <strong>{{ email }}</strong
+                >.
             </p>
         </div>
 
-        <div
-            v-else-if="alreadyExists"
-            class="mt-8 rounded-lg bg-amber-50 p-4 text-amber-900"
-        >
+        <div v-else-if="alreadyExists" class="mt-8 rounded-lg bg-amber-50 p-4 text-amber-900">
             <p class="font-medium">An account with this email already exists.</p>
             <p class="mt-1 text-sm">
                 <NuxtLink to="/login" class="font-semibold text-sky-700 hover:underline">
                     Sign in
                 </NuxtLink>
                 instead, or
-                <NuxtLink
-                    to="/forgot-password"
-                    class="font-semibold text-sky-700 hover:underline"
-                >
+                <NuxtLink to="/forgot-password" class="font-semibold text-sky-700 hover:underline">
                     reset your password
                 </NuxtLink>
                 if you forgot it.
@@ -136,8 +131,8 @@ async function submit() {
                     class="input mt-1"
                 />
                 <p class="mt-1 text-xs text-gray-500">
-                    Shown when you message someone. We'll use the part of your email
-                    before the @ if you leave this blank.
+                    Shown when you message someone. We'll use the part of your email before the @ if
+                    you leave this blank.
                 </p>
             </div>
 
@@ -205,10 +200,7 @@ async function submit() {
                         </svg>
                     </button>
                 </div>
-                <p
-                    v-if="passwordTooShort"
-                    class="mt-1 text-xs text-amber-700"
-                >
+                <p v-if="passwordTooShort" class="mt-1 text-xs text-amber-700">
                     Needs at least 8 characters.
                 </p>
                 <p v-else class="mt-1 text-xs text-gray-500">At least 8 characters.</p>
@@ -226,10 +218,7 @@ async function submit() {
                     required
                     class="input mt-1"
                 />
-                <p
-                    v-if="passwordsMismatch"
-                    class="mt-1 text-xs text-amber-700"
-                >
+                <p v-if="passwordsMismatch" class="mt-1 text-xs text-amber-700">
                     Passwords don't match.
                 </p>
             </div>
@@ -248,11 +237,7 @@ async function submit() {
                 {{ error }}
             </p>
 
-            <button
-                type="submit"
-                class="btn-primary w-full"
-                :disabled="loading || !canSubmit"
-            >
+            <button type="submit" class="btn-primary w-full" :disabled="loading || !canSubmit">
                 {{ loading ? 'Creating account…' : 'Create account' }}
             </button>
         </form>
