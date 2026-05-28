@@ -210,13 +210,13 @@ The repo is at https://github.com/melissapula/garage-sales (origin already confi
 ### Scripts
 
 - `scripts/seed-sales.mjs` — reads `scripts/seed-data.json`, geocodes each address via Mapbox, inserts via Supabase service role (bypasses RLS).
+- `scripts/generate-og-image.mjs` (`npm run og:generate`) — renders `public/og-image.png` (1200×630) via Satori + resvg. Loads Playfair Display + DM Sans from Google Fonts at run-time so the rendered text matches the in-app brand. Re-run any time the brand or tagline changes. Sends an IE9 User-Agent to Google Fonts so we get WOFF (which opentype.js can parse) instead of WOFF2 (which it can't).
 
 ---
 
 ## Known gaps / what's left
 
 - **Auth emails through Resend.** Currently we use Supabase's default mailer (rate-limited, generic sender). The Resend SDK + idempotent `/api/notifications/message` endpoint are wired in, but the auth side (signup confirmation, password reset) still goes through Supabase's mailer. Frula already has a verified Resend domain we could borrow.
-- **`public/og-image.png` is missing.** Both `/sale/[id]` and `/share/[id]` reference `${siteUrl}/og-image.png` as the OG fallback when no sale photos exist. Need a 1200×630 PNG (brand wordmark + tagline).
 - **Mapbox token URL allowlist.** Set in the Mapbox dashboard before deploy — without it, anyone can lift the public token and run up the bill. The allowlist applies to _every_ Mapbox call (forward + reverse geocode in `useGeocode`, Optimization v1 in `useRouteOptimizer`, Directions v5 in `buildRouteFromOrder`, AND the GL JS tile fetches), not just the rendered map. One allowlist setting covers them all because they share the same public token.
 - **Viewport-aware `/browse` fetch.** `fetchActiveSales` returns every active sale unbounded. Fine today; once a few thousand sales are live nationwide we'd want bbox + radius filters with a hard `limit(500)`.
 - **No mobile drawer for filters** — currently the browse page uses simple tab navigation between filters/list/map on small screens.

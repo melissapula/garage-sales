@@ -13,7 +13,8 @@
         "lint:fix": "eslint . --fix",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "prepare": "husky"
+        "prepare": "husky",
+        "og:generate": "node scripts/generate-og-image.mjs"
     },
     "lint-staged": {
         "*.{vue,ts,tsx,js,mjs,cjs,json,md,yml,yaml,css,scss}": [
@@ -36,6 +37,7 @@
         "vuedraggable": "^4.1.0"
     },
     "devDependencies": {
+        "@resvg/resvg-js": "^2.6.2",
         "@types/mapbox-gl": "^3.4.1",
         "@vite-pwa/nuxt": "^1.1.1",
         "autoprefixer": "^10.4.20",
@@ -44,6 +46,7 @@
         "lint-staged": "^17.0.5",
         "postcss": "^8.4.49",
         "prettier": "^3.8.3",
+        "satori": "^0.26.0",
         "tailwindcss": "^3.4.15"
     }
 }
